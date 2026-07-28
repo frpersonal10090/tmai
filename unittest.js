@@ -966,6 +966,15 @@ function expectEqual(a, b) {
 }
 
 function runUnitTest() {
+  var success = false;
+  var originalStateConstructor = State;
+  // These historical Snellman logs predate variable turn order and do not
+  // encode that option. Keep their original fixed-turn-order replay context.
+  State = function() {
+    originalStateConstructor.call(this);
+    this.turnorder = false;
+  };
+  State.prototype = originalStateConstructor.prototype;
   try {
     //snellmandebug = true;
     var game;
@@ -991,11 +1000,236 @@ function runUnitTest() {
 
     console.log('test success');
     addLog('test success');
+    success = true;
   } catch(e) {
     console.log('test fail - print out snellmanunittesttext or set snellmandebug = true to see log');
     addLog('test fail');
   }
+  State = originalStateConstructor;
   drawHud();
   drawMap();
   displayLog();
+  return success;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// AI infrastructure characterization tests
+//
+// These tests intentionally describe the current behavior of cloning and
+// restoring AILou actors. A failure means an invariant needed by a future
+// simulation/search AI is not currently true; do not change the AI to make a
+// failure disappear without first understanding the characterization.
+
+function runCharacterizationTest(name, fun) {
+  try {
+    fun();
+    console.log('PASS: ' + name);
+    addLog('PASS: ' + name);
+    return true;
+  } catch(e) {
+    var message = e && e.message ? e.message : e;
+    console.log('FAIL: ' + name + ' - ' + message);
+    addLog('FAIL: ' + name + ' - ' + message);
+    return false;
+  }
+}
+
+// Creates a small but internally consistent game position. The tests replace
+// the global game/state on purpose: this is how save/load and tryActions are
+// used by the application itself.
+function createAILouCharacterizationFixture(level) {
+  game = new Game();
+  state = new State();
+  state.aiAlgorithm = level;
+  state.worldMap = 4;
+  initStandardWorld(game);
+  initBoard();
+
+  var player = new Player();
+  player.index = 0;
+  player.name = 'characterization ai';
+  player.human = false;
+  player.setFaction(F_CHAOS);
+  initPlayerFaction(player);
+  player.actor = new AILou(level);
+  game.players = [player];
+
+  recalculateColorMaps();
+  calculateTownClusters();
+  return player;
+}
+
+function testAILouLevelSurvivesClone() {
+  var player = createAILouCharacterizationFixture(5);
+  expectEqual(5, AILou.ail);
+  clone(player.actor);
+  expectEqual(5, AILou.ail);
+}
+
+function testAILouLevelSurvivesSaveGameState() {
+  createAILouCharacterizationFixture(5);
+  expectEqual(5, AILou.ail);
+  saveGameState(game, state, undefined);
+  expectEqual(5, AILou.ail);
+}
+
+function testAILouLevelSurvivesLoadGameState() {
+  createAILouCharacterizationFixture(5);
+  var saved = saveGameState(game, state, undefined);
+  new AILou(5); // Isolate loadGameState from saveGameState's clone behavior.
+  expectEqual(5, AILou.ail);
+  loadGameState(saved);
+  expectEqual(5, AILou.ail);
+}
+
+function testAILouLevelSurvivesTryActionsRollbackSnapshot() {
+  var player = createAILouCharacterizationFixture(5);
+  var error = tryActions(player, []);
+  expect(error != '', 'empty action sequence must be rejected');
+  expectEqual(5, AILou.ail);
+}
+
+function testAILouSequentialConstructionLastLevelWins() {
+  new AILou(5);
+  expectEqual(5, AILou.ail);
+  new AILou(6);
+  expectEqual(6, AILou.ail);
+}
+
+function testSaveRestoreRoundTripForSimulationState() {
+  var player = createAILouCharacterizationFixture(5);
+
+  state.type = S_ACTION;
+  state.next_type = S_LEECH;
+  state.round = 3;
+  state.startPlayer = 0;
+  state.currentPlayer = 0;
+  state.prevPlayer = 0;
+  state.showResourcesPlayer = 0;
+  state.typestack = [S_ACTION];
+  state.currentPlayerStack = [0];
+  state.numHandledForState = 7;
+  state.leecharray = [[0, 2]];
+  state.leechi = 0;
+  state.leechtaken = 1;
+  state.turnorder = true;
+  state.currentOrder = 0;
+  state.passOrder = 1;
+  state.turnMatrix = [[0], [0]];
+  state.aiAlgorithm = 5;
+  state.worldMap = 5;
+  state.fireice = false;
+
+  setWorld(1, 1, R);
+  setBuilding(1, 1, B_D, player.woodcolor);
+  game.bridges[0][0] = player.woodcolor;
+  game.octogons[A_POWER_1P] = 1;
+  game.bonustiles[T_BON_1P] = 1;
+  game.bonustilecoins[T_BON_1P] = 2;
+  game.favortiles[T_FAV_3F] = 1;
+  game.towntiles[T_TW_5VP_6C] = 1;
+  game.roundtiles[1] = T_ROUND_D2VP_4W1P;
+  player.c = 19;
+  player.w = 6;
+  player.p = 2;
+  player.pw2 = 4;
+  player.vp = 37;
+  player.b_d--;
+  player.bonustile = T_BON_1P;
+  player.favortiles[T_FAV_3F] = 1;
+  player.towntiles[T_TW_5VP_6C] = 1;
+  player.cult = [2, 3, 4, 5];
+  player.keys = 1;
+  player.shipping = 2;
+  player.digging = 1;
+  player.octogons[A_BONUS_CULT] = 1;
+
+  var saved = saveGameState(game, state, undefined);
+
+  setWorld(1, 1, G);
+  setBuilding(1, 1, B_NONE, N);
+  game.bridges[0][0] = N;
+  game.octogons = {};
+  player.c = 0;
+  player.vp = 0;
+  state.round = 6;
+  state.aiAlgorithm = 6;
+  state.worldMap = 0;
+  state.typestack = [];
+
+  loadGameState(saved);
+  player = game.players[0];
+
+  expectEqual(R, getWorld(1, 1));
+  expectEqual(B_D, getBuilding(1, 1)[0]);
+  expectEqual(player.woodcolor, game.bridges[0][0]);
+  expectEqual(1, game.octogons[A_POWER_1P]);
+  expectEqual(2, game.bonustilecoins[T_BON_1P]);
+  expectEqual(T_ROUND_D2VP_4W1P, game.roundtiles[1]);
+  expectEqual(19, player.c);
+  expectEqual(6, player.w);
+  expectEqual(2, player.p);
+  expectEqual(4, player.pw2);
+  expectEqual(37, player.vp);
+  expectEqual(T_BON_1P, player.bonustile);
+  expectEqual(1, player.favortiles[T_FAV_3F]);
+  expectEqual(1, player.towntiles[T_TW_5VP_6C]);
+  expectEqual(5, player.cult[3]);
+  expectEqual(2, player.shipping);
+  expectEqual(1, player.digging);
+  expectEqual(1, player.octogons[A_BONUS_CULT]);
+  expectEqual(S_ACTION, state.type);
+  expectEqual(S_LEECH, state.next_type);
+  expectEqual(3, state.round);
+  expectEqual(5, state.aiAlgorithm);
+  expectEqual(5, state.worldMap);
+  expectEqual(false, state.fireice);
+  expectEqual(1, state.typestack.length);
+  expectEqual(1, state.currentPlayerStack.length);
+  expectEqual(7, state.numHandledForState);
+  expectEqual(1, state.leecharray.length);
+  expectEqual(1, state.leechtaken);
+  expectEqual(1, state.passOrder);
+  expectEqual(0, colorToPlayerMap[player.color]);
+}
+
+function testSavedStateRemainsReusableAfterLoad() {
+  createAILouCharacterizationFixture(5);
+  state.round = 3;
+  var saved = saveGameState(game, state, undefined);
+  loadGameState(saved);
+  state.round = 6;
+  expectEqual(3, saved.state.round);
+}
+
+function runAILouInfrastructureCharacterizationTests() {
+  var results = [];
+  results.push(runCharacterizationTest('AILou(5) level survives clone()', testAILouLevelSurvivesClone));
+  results.push(runCharacterizationTest('AILou(5) level survives saveGameState()', testAILouLevelSurvivesSaveGameState));
+  results.push(runCharacterizationTest('AILou(5) level survives loadGameState()', testAILouLevelSurvivesLoadGameState));
+  results.push(runCharacterizationTest('AILou(5) level survives tryActions rollback snapshot', testAILouLevelSurvivesTryActionsRollbackSnapshot));
+  results.push(runCharacterizationTest('AILou sequential construction uses the most recently constructed level', testAILouSequentialConstructionLastLevelWins));
+  results.push(runCharacterizationTest('save/load round-trips simulation-relevant game and state fields', testSaveRestoreRoundTripForSimulationState));
+  results.push(runCharacterizationTest('saved state remains reusable after load', testSavedStateRemainsReusableAfterLoad));
+
+  var passed = 0;
+  for(var i = 0; i < results.length; i++) if(results[i]) passed++;
+  var success = passed == results.length;
+  var summary = 'AI infrastructure characterization: ' + passed + '/' + results.length + ' passed';
+  console.log(summary);
+  addLog(summary);
+  return success;
+}
+
+function runAllUnitTests() {
+  var historicalSuccess = runUnitTest();
+  var characterizationSuccess = runAILouInfrastructureCharacterizationTests();
+  var success = historicalSuccess && characterizationSuccess;
+  var summary = success ? 'all tests passed' : 'test failures detected';
+  console.log(summary);
+  addLog(summary);
+  drawHud();
+  drawMap();
+  displayLog();
+  return success;
 }

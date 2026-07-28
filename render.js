@@ -1869,6 +1869,6 @@ function drawDebugActions(pindex, px, py) {
   button = makeLinkButton(px + 450, py + 16, 'test', uiElement);
   button.style.color = DEBUGBUTTONCOLOR;
   button.onclick = function() {
-    runUnitTest();
+    runAllUnitTests();
   };
 }
