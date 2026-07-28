@@ -34,6 +34,27 @@ inherit(Human, Actor);
 var mapClickFun = null;
 var tileClickFun = null;
 var cultClickFun = null;
+// Optional setup for map-based action modes. The rules engine still performs
+// the full action validation on execution; this only avoids obviously wrong
+// board clicks and gives the renderer a precise set of useful highlights.
+var mapActionTargetFun = null;
+var mapActionTargetHelp = '';
+
+function setMapActionTargets(help, fun) {
+  mapActionTargetHelp = help;
+  mapActionTargetFun = fun;
+}
+
+// Keep the setup map affordance tied to the same conditions that the rules
+// engine uses. This is deliberately only a UI helper: placeInitialDwelling
+// remains the final authority when the click is submitted.
+function isInitialDwellingTarget(player, x, y) {
+  return player &&
+      (player.landdist != 0 || touchesWater(x, y)) &&
+      getWorld(x, y) == player.auxcolor &&
+      getBuilding(x, y)[0] == B_NONE &&
+      player.b_d > 0;
+}
 
 //enum for human action states. This is a sub-division of the main game-states for human UI only.
 //By locking certain activities into certain states, ruining the game by overwriting the mapClickFun etc... with something different is prevented
@@ -87,6 +108,11 @@ function clearHumanState() {
   mapClickFun = null;
   tileClickFun = null;
   cultClickFun = null;
+  mapActionTargetFun = null;
+  mapActionTargetHelp = '';
+  // Choice modals belong to the paused human input state. Clear them before
+  // the HUD redraw so a completed bonus, favor or town choice never lingers.
+  popupElement.innerHTML = '';
   if(game.players.length > 0) drawHud();
   // notify the clearHumanState listeners and clear onClearHumanState.
   var temp = onClearHumanState;
@@ -160,6 +186,7 @@ function prepareAction(action) {
   }
 
   actionEl.innerHTML = actionsToString(pactions);
+  updateActionPlanSummary();
 
   var cults = []; //for acolytes
   var cultincome = player.getFaction().getActionIncome(player, action.type)[R_FREECULT];
@@ -168,6 +195,7 @@ function prepareAction(action) {
   // Recursive because multiple decisions may be required for a single action.
   function tryPrepareAction(action) {
     actionEl.innerHTML = actionsToString(pactions);
+    updateActionPlanSummary();
     if(action.type == A_PASS && action.bontile == T_NONE && state.round != 6) {
       var fun = function(tile) {
         if(!isBonusTile(tile)) return;
@@ -216,6 +244,7 @@ function prepareAction(action) {
         clearHumanState();
         pactions.push(makeActionWithCult(A_ACOLYTES_CULT, cult));
         actionEl.innerHTML = actionsToString(pactions);
+        updateActionPlanSummary();
         tryPrepareAction(action);
       };
       queueHumanState(HS_CULT, 'choose cult track to increase', fun);
@@ -316,6 +345,7 @@ Human.prototype.doAction = function(playerIndex, callback) {
     actionEl.innerHTML = '';
     var error = callback(playerIndex, pactions);
     pactions = [];
+    updateActionPlanSummary();
     if(error != '') {
       setHelp('Execute action error: ' + error);
     } else {
@@ -327,6 +357,7 @@ Human.prototype.doAction = function(playerIndex, callback) {
   executeButtonClearFun_ = function() {
     pactions.pop();
     actionEl.innerHTML = actionsToString(pactions);
+    updateActionPlanSummary();
   };
 };
 
@@ -352,6 +383,10 @@ Human.prototype.chooseInitialFavorTile = function(playerIndex, callback) {
 
 Human.prototype.chooseInitialDwelling = function(playerIndex, callback) {
   var fun = function(x, y) {
+    var player = game.players[playerIndex];
+    // The map overlay also filters these clicks, but keep this guard here so
+    // programmatic or stale clicks get the same friendly behaviour.
+    if(!isInitialDwellingTarget(player, x, y)) return;
     undoGameState = saveGameState(game, state, undefined);
     var error = callback(playerIndex, [x, y]);
     if(error == '') {
@@ -369,24 +404,108 @@ Human.prototype.chooseFaction = function(playerIndex, callback) {
     if(error != '') setHelp('invalid faction: ' + error + ' - Please try again');
   };
 
-  var bg = makeSizedDiv(ACTIONPANELX, ACTIONPANELY, ACTIONPANELW, ACTIONPANELH, popupElement);
-  //bg.style.backgroundColor = 'rgba(255,255,255,0.85)'; //alpha does not work in IE
-  bg.style.backgroundColor = '#FFFFFF';
-  bg.innerHTML = 'choose faction';
-  bg.style.border = '1px solid black';
-
   var factions = getPossibleFactionChoices();
+  var grouped = {};
+  for(var i = 0; i < factions.length; i++) {
+    var color = factionColor(factions[i]);
+    // Shapeshifters and Riverwalkers use the two variable-terrain colours on
+    // opposite sides of their faction boards, but belong in one choice group.
+    var groupColor = (color == X || color == Z) ? X : color;
+    if(!grouped[groupColor]) grouped[groupColor] = [];
+    grouped[groupColor].push(factions[i]);
+  }
 
-  var xpos = ACTIONPANELX + 5;
-  var ypos = ACTIONPANELY + 16;
-  for(var i = 0; i <= factions.length; i++) {
-    var el = makeLinkButton(xpos, ypos, getFactionName(factions[i]), popupElement);
-    ypos += 16;
-    if(ypos > (ACTIONPANELY + ACTIONPANELH - 16)) {
-      xpos += 120;
-      ypos = ACTIONPANELY + 15;
+  popupElement.innerHTML = '';
+  var backdrop = makeSizedDiv(0, 0, 1085, 900, popupElement);
+  backdrop.style.background = 'rgba(35, 27, 20, 0.28)';
+  backdrop.style.zIndex = 2000;
+
+  var panelX = 42;
+  var panelY = 40;
+  var panelW = 1000;
+  // Fire & Ice adds enough terrain families to need a third row of blocks.
+  var panelH = 575;
+  var panel = makeSizedDiv(panelX, panelY, panelW, panelH, popupElement);
+  panel.style.boxSizing = 'border-box';
+  panel.style.padding = '18px';
+  panel.style.background = 'linear-gradient(145deg, #fff7de, #ead5a6)';
+  panel.style.border = '3px solid #6e4b2d';
+  panel.style.borderRadius = '18px';
+  panel.style.boxShadow = '0 12px 28px rgba(29, 18, 9, 0.38), inset 0 0 0 2px rgba(255,255,255,0.55)';
+  panel.style.zIndex = 2001;
+
+  var title = makeText(panelX + 24, panelY + 19, 'Choose a faction', popupElement);
+  title.style.fontFamily = 'Georgia, serif';
+  title.style.fontWeight = 'bold';
+  title.style.fontSize = '25px';
+  title.style.color = '#432a18';
+  title.style.zIndex = 2002;
+  var subtitle = makeText(panelX + 26, panelY + 51, 'Each terrain color offers two factions. Choose the one you want to lead.', popupElement);
+  subtitle.style.fontSize = '13px';
+  subtitle.style.color = '#71563a';
+  subtitle.style.zIndex = 2002;
+
+  var colors = [];
+  for(var color = FACTION_COLOR_BEGIN; color <= FACTION_COLOR_END; color++) {
+    if(grouped[color]) colors.push(color);
+  }
+
+  for(var g = 0; g < colors.length; g++) {
+    var groupColor = colors[g];
+    var column = g % 4;
+    var row = Math.floor(g / 4);
+    var groupX = panelX + 22 + column * 244;
+    var groupY = panelY + 86 + row * 157;
+    var group = makeSizedDiv(groupX, groupY, 226, 140, popupElement);
+    group.style.boxSizing = 'border-box';
+    group.style.background = 'rgba(255, 252, 240, 0.87)';
+    group.style.border = '1px solid #9c7750';
+    group.style.borderRadius = '10px';
+    group.style.boxShadow = '0 2px 4px rgba(67, 43, 22, 0.16)';
+    group.style.overflow = 'hidden';
+    group.style.zIndex = 2002;
+
+    var groupHeader = makeSizedDiv(groupX, groupY, 226, 29, popupElement);
+    groupHeader.style.boxSizing = 'border-box';
+    groupHeader.style.padding = '6px 10px';
+    groupHeader.style.background = getImageColor(groupColor);
+    groupHeader.style.borderRadius = '9px 9px 0 0';
+    groupHeader.style.color = getHighContrastColor(getImageColor(groupColor));
+    groupHeader.style.fontSize = '12px';
+    groupHeader.style.fontWeight = 'bold';
+    groupHeader.style.letterSpacing = '0.7px';
+    groupHeader.style.zIndex = 2003;
+    groupHeader.innerHTML = groupColor == X ? 'VARIABLE TERRAIN' :
+        getColorName(groupColor).toUpperCase() + ' TERRAIN';
+
+    for(var f = 0; f < grouped[groupColor].length; f++) {
+      var faction = grouped[groupColor][f];
+      var card = makeSizedDiv(groupX + 10, groupY + 39 + f * 45, 206, 36, popupElement);
+      card.style.boxSizing = 'border-box';
+      card.style.padding = '9px 11px';
+      card.style.background = '#fffaf0';
+      card.style.border = '1px solid #b99567';
+      card.style.borderLeft = '6px solid ' + getImageColor(groupColor);
+      card.style.borderRadius = '6px';
+      card.style.boxShadow = '0 1px 2px rgba(55, 35, 18, 0.12)';
+      card.style.color = '#3e2818';
+      card.style.cursor = 'pointer';
+      card.style.fontFamily = 'Georgia, serif';
+      card.style.fontSize = '14px';
+      card.style.fontWeight = 'bold';
+      card.style.zIndex = 2003;
+      card.innerHTML = getFactionName(faction);
+      card.title = 'Choose ' + getFactionName(faction);
+      card.onclick = bind(buttonClickFun, faction);
+      card.onmouseover = function() {
+        this.style.background = '#fff1c9';
+        this.style.transform = 'translateX(2px)';
+      };
+      card.onmouseout = function() {
+        this.style.background = '#fffaf0';
+        this.style.transform = 'translateX(0)';
+      };
     }
-    el.onclick = bind(buttonClickFun, factions[i]);
   }
 };
 
@@ -436,6 +555,7 @@ Human.prototype.chooseAuxColor = function(playerIndex, callback) {
 var autoLeech = false;
 var autoLeech1 = false;
 var autoLeechNo = false;//for debug
+var autoLeechAccept = false;
 
 var leechYesFun = null; //for shortcuts
 var leechNoFun = null; //for shortcuts
@@ -452,6 +572,11 @@ Human.prototype.leechPower = function(playerIndex, fromPlayer, amount, vpcost, r
     return;
   }
 
+  if(autoLeechAccept) {
+    callback(playerIndex, true);
+    return;
+  }
+
   if(autoLeech) {
     doAutoLeech();
     return;
@@ -462,55 +587,89 @@ Human.prototype.leechPower = function(playerIndex, fromPlayer, amount, vpcost, r
     return;
   }
 
-  var j = 0;
-  //drawHud();
-  var bg = makeSizedDiv(ACTIONPANELX, ACTIONPANELY, ACTIONPANELW, ACTIONPANELH, popupElement);
-  bg.style.backgroundColor = '#fff';
-  bg.innerHTML = 'leech ' + amount + ' power from ' + getFullName(game.players[fromPlayer]) + '?';
-  bg.style.border = '1px solid black';
+  popupElement.innerHTML = '';
+  var backdrop = makeSizedDiv(0, 0, 1085, 900, popupElement);
+  backdrop.style.background = 'rgba(35, 27, 20, 0.22)';
+  backdrop.style.zIndex = 2000;
 
-  var yes = makeLinkButton(ACTIONPANELX + 5, ACTIONPANELY + 30, 'yes', popupElement);
-  leechYesFun = function() {
+  var panelX = 246;
+  var panelY = 205;
+  var panelW = 590;
+  var panelH = 225;
+  var panel = makeSizedDiv(panelX, panelY, panelW, panelH, popupElement);
+  panel.style.boxSizing = 'border-box';
+  panel.style.padding = '20px';
+  panel.style.background = 'linear-gradient(145deg, #fff8e4, #e8d1a0)';
+  panel.style.border = '3px solid #67452c';
+  panel.style.borderRadius = '18px';
+  panel.style.boxShadow = '0 14px 30px rgba(30, 18, 9, 0.4), inset 0 0 0 2px rgba(255,255,255,0.5)';
+  panel.style.zIndex = 2001;
+
+  var heading = makeText(panelX + 24, panelY + 18, 'Power leech', popupElement);
+  heading.style.color = '#432a18';
+  heading.style.fontFamily = 'Georgia, serif';
+  heading.style.fontSize = '25px';
+  heading.style.fontWeight = 'bold';
+  heading.style.zIndex = 2002;
+  var from = makeText(panelX + 24, panelY + 52, getFullName(game.players[fromPlayer]) + ' triggered a neighbouring building.', popupElement);
+  from.style.color = '#70543a';
+  from.style.fontSize = '13px';
+  from.style.zIndex = 2002;
+
+  var power = makeSizedDiv(panelX + 24, panelY + 79, 122, 42, popupElement);
+  power.style.boxSizing = 'border-box';
+  power.style.padding = '8px 12px';
+  power.style.background = 'radial-gradient(circle at 35% 30%, #cda6f0, #72509d)';
+  power.style.border = '2px solid #4d326d';
+  power.style.borderRadius = '21px';
+  power.style.boxShadow = 'inset 0 1px 2px rgba(255,255,255,0.65), 0 2px 3px rgba(53,31,75,0.28)';
+  power.style.color = '#fff';
+  power.style.fontWeight = 'bold';
+  power.style.textAlign = 'center';
+  power.style.zIndex = 2002;
+  power.innerHTML = '+' + amount + ' POWER';
+  var cost = makeText(panelX + 162, panelY + 92, vpcost > 0 ? 'Cost: ' + vpcost + ' VP' : 'No VP cost', popupElement);
+  cost.style.color = '#5c422b';
+  cost.style.fontSize = '15px';
+  cost.style.fontWeight = 'bold';
+  cost.style.zIndex = 2002;
+
+  var finish = function(accept, always) {
+    if(always) autoLeechAccept = true;
     leechNoFun = null;
     leechYesFun = null;
-    callback(playerIndex, true);
-  }
-  yes.onclick = leechYesFun;
+    popupElement.innerHTML = '';
+    callback(playerIndex, accept);
+  };
+  leechYesFun = function() { finish(true, false); };
+  leechNoFun = function() { finish(false, false); };
 
-  var no = makeLinkButton(ACTIONPANELX + 5, ACTIONPANELY + 55, 'no', popupElement);
-  leechNoFun = function() {
-    leechNoFun = null;
-    leechYesFun = null;
-    callback(playerIndex, false);
-  }
-  no.onclick = leechNoFun;
+  var makeChoice = function(x, label, detail, background, border, click) {
+    var choice = makeSizedDiv(x, panelY + 138, 166, 62, popupElement);
+    choice.style.boxSizing = 'border-box';
+    choice.style.padding = '9px 8px';
+    choice.style.background = background;
+    choice.style.border = '2px solid ' + border;
+    choice.style.borderRadius = '9px';
+    choice.style.boxShadow = '0 2px 3px rgba(54, 34, 16, 0.2)';
+    choice.style.color = getHighContrastColor(border);
+    choice.style.cursor = 'pointer';
+    choice.style.textAlign = 'center';
+    choice.style.zIndex = 2002;
+    choice.innerHTML = '<b>' + label + '</b><br><span style="font-size:11px">' + detail + '</span>';
+    choice.onclick = click;
+    choice.onmouseover = function() { this.style.transform = 'translateY(-2px)'; };
+    choice.onmouseout = function() { this.style.transform = 'translateY(0)'; };
+    return choice;
+  };
+  makeChoice(panelX + 24, 'Decline', 'keep your VP', '#eee3d0', '#937552', leechNoFun);
+  makeChoice(panelX + 212, 'Accept', 'take the power', '#6f9d79', '#426b4b', leechYesFun);
+  makeChoice(panelX + 400, 'Always accept', 'for this game', '#d6a94b', '#90651c', function() { finish(true, true); });
 
-  if(amount <= 1) {
-    var a = makeLinkButton(ACTIONPANELX + 5, ACTIONPANELY + 80, 'auto for 1', popupElement);
-    a.title = 'automatically leech if it is 1 power and not from cultists';
-    a.onclick = function() {
-      autoLeech1 = true;
-      leechNoFun = null;
-      leechYesFun = null;
-      callback(playerIndex, true);
-    }
-  }
-
-  var a2 = makeLinkButton(ACTIONPANELX + 5, ACTIONPANELY + 128, 'auto "smart"', popupElement);
-  a2.onclick = function() {
-    a2.title = 'Automatically decide whether to accept or decline leeching based on amount and round number. Never see the leech question again this game!';
-    autoLeech = true;
-    leechNoFun = null;
-    leechYesFun = null;
-    doAutoLeech();
-  }
-
-  var a3 = makeLinkButton(ACTIONPANELX + 480, ACTIONPANELY + 128, 'never', popupElement);
-  a3.style.color = '#eee';
-  a3.onclick = function() {
-    autoLeechNo = true;
-    callback(playerIndex, false);
-  }
+  var keys = makeText(panelX + 24, panelY + 204, 'Keyboard: Y accepts · N declines', popupElement);
+  keys.style.color = '#7a6045';
+  keys.style.fontSize = '11px';
+  keys.style.zIndex = 2002;
 };
 
 
@@ -717,6 +876,12 @@ function getBuildingForUpgradeClick(x, y) {
 }
 
 function upgrade1fun() {
+  var player = getCurrentPlayer();
+  setMapActionTargets('Highlighted buildings can be upgraded to TP or SH.', function(x, y) {
+    var building = getBuildingForUpgradeClick(x, y);
+    if(getBuilding(x, y)[1] != player.woodcolor) return false;
+    return (building == B_D && player.b_tp > 0) || (building == B_TP && player.b_sh > 0);
+  });
   var fun = function(x, y) {
     clearHumanState();
     //Commented out because e.g. chaos magician double action may have turned it to your color before, this just doesn't detect that yet
@@ -734,6 +899,12 @@ function upgrade1fun() {
 }
 
 function upgrade2fun() {
+  var player = getCurrentPlayer();
+  setMapActionTargets('Highlighted buildings can be upgraded to TE or SA.', function(x, y) {
+    var building = getBuildingForUpgradeClick(x, y);
+    if(getBuilding(x, y)[1] != player.woodcolor) return false;
+    return (building == B_TP && player.b_te > 0) || (building == B_TE && player.b_sa > 0);
+  });
   var fun = function(x, y) {
     clearHumanState();
     //Commented out because e.g. chaos magician double action may have turned it to your color before, this just doesn't detect that yet

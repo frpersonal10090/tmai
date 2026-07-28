@@ -405,187 +405,704 @@ function drawCultTracks(px, py) {
   drawVLine(px, py + 8 * trackheight / 12, trackwidth * 4, '#000');
 }
 
-function renderTownTile(px, py, tile, vp, text, onTileClick) {
-  var el = makeDiv(px, py, hudElement);
-  el.style.border = '1px solid #ff8822';
-  el.style.width = 45;
-  el.style.height = 45;
-  el.style.backgroundColor = '#888888';
-  var text1el = makeDiv(px + 5, py + 5, hudElement);
-  text1el.innerHTML = vp + 'vp';
-  var text2el = makeDiv(px + 5, py + 25, hudElement);
-  text2el.innerHTML = text;
+function renderTownTile(px, py, tile, details, onTileClick, parent) {
+  parent = parent || hudElement;
+  // Town tiles use a compact, square plaque: distinct from the bonus scrolls,
+  // but built from the same small vocabulary of rewards and point medals.
+  var el = makeSizedDiv(px, py, 52, 50, parent);
+  el.style.boxSizing = 'border-box';
+  el.style.border = '2px solid #58402f';
+  el.style.borderRadius = '7px';
+  el.style.background = 'linear-gradient(135deg, #8f6a49, #d8b979 16%, #f7e8bb 52%, #bd8b52 100%)';
+  el.style.boxShadow = '0 2px 3px rgba(48,31,17,.42), inset 0 0 0 1px #fff3cf';
+
+  var inner = makeSizedDiv(px + 4, py + 4, 44, 42, parent);
+  inner.style.boxSizing = 'border-box';
+  inner.style.border = '1px solid rgba(104,71,38,.58)';
+  inner.style.borderRadius = '4px';
+  inner.style.background = 'linear-gradient(90deg, rgba(150,103,56,.13), rgba(255,250,220,.22) 48%, rgba(150,103,56,.14))';
+  inner.style.pointerEvents = 'none';
+
+  drawVPBadge(px + 17, py + 5, details.vp, parent);
+
+  if(details.reward || details.cultAmount || details.shipping) {
+    var divider = makeSizedDiv(px + 9, py + 27, 34, 1, parent);
+    divider.style.background = 'rgba(103,70,38,.46)';
+    divider.style.pointerEvents = 'none';
+  }
+  if(details.reward) {
+    drawBonusResourceAmount(px + 17, py + 30, details.reward, parent, false);
+  } else if(details.cultAmount) {
+    drawCultSetReward(px + 7, py + 31, details.cultAmount, parent);
+  } else if(details.shipping) {
+    // The promotion's shipping reward is clearer as a compact named badge
+    // than as a tiny abstract water glyph.
+    var shippingLabel = makeSizedDiv(px + 10, py + 30, 32, 12, parent);
+    shippingLabel.style.boxSizing = 'border-box';
+    shippingLabel.style.border = '1px solid #3c6475';
+    shippingLabel.style.borderRadius = '6px';
+    shippingLabel.style.background = 'linear-gradient(#e0f1f4, #82b6c4)';
+    shippingLabel.style.boxShadow = 'inset 0 1px 1px rgba(255,255,255,.75)';
+    styleBonusTileText(shippingLabel, 6, 'bold', '#244653');
+    shippingLabel.style.display = 'flex';
+    shippingLabel.style.alignItems = 'center';
+    shippingLabel.style.justifyContent = 'center';
+    shippingLabel.innerHTML = 'SHIP +1';
+  }
 
   if(onTileClick) {
-    var elui = makeSameSizeDiv(el, hudElement);
+    var elui = makeSameSizeDiv(el, parent);
     elui.style.cursor = 'pointer';
-    elui.onclick = function() {
-      onTileClick(tile);
-    };
+    elui.onclick = function() { onTileClick(tile); };
     IEClickHack(elui);
     elui.title = tileToHelpString(tile, true);
   }
 
-  return [46, 46];
+  return [53, 51];
 }
 
-function drawTownTile(px, py, tile, onTileClick) {
-  var vp = 0;
-  var text = '';
-  if(tile == T_TW_2VP_2CULT) { vp = 2; text = 'cults2'; }
-  else if(tile == T_TW_4VP_SHIP) { vp = 4; text = 'ship/c'; }
-  else if(tile == T_TW_5VP_6C) { vp = 5; text = '6c'; }
-  else if(tile == T_TW_6VP_8PW) { vp = 6; text = '8pw'; }
-  else if(tile == T_TW_7VP_2W) { vp = 7; text = '2w'; }
-  else if(tile == T_TW_8VP_CULT) { vp = 8; text = 'cults'; }
-  else if(tile == T_TW_9VP_P) { vp = 9; text = '1p'; }
-  else if(tile == T_TW_11VP) { vp = 11; text = ''; }
-  return renderTownTile(px, py, tile, vp, text, onTileClick);
+function drawTownTile(px, py, tile, onTileClick, parent) {
+  var details = {vp: 0};
+  if(tile == T_TW_2VP_2CULT) details = {vp: 2, cultAmount: 2};
+  else if(tile == T_TW_4VP_SHIP) details = {vp: 4, shipping: true};
+  else if(tile == T_TW_5VP_6C) details = {vp: 5, reward: {icon: 'coin', amount: 6}};
+  else if(tile == T_TW_6VP_8PW) details = {vp: 6, reward: {icon: 'power', amount: 8}};
+  else if(tile == T_TW_7VP_2W) details = {vp: 7, reward: {icon: 'worker', amount: 2}};
+  else if(tile == T_TW_8VP_CULT) details = {vp: 8, cultAmount: 1};
+  else if(tile == T_TW_9VP_P) details = {vp: 9, reward: {icon: 'priest', amount: 1}};
+  else if(tile == T_TW_11VP) details = {vp: 11};
+  return renderTownTile(px, py, tile, details, onTileClick, parent);
 }
 
-function renderBonusTile(px, py, tile, text1, text2, text3, onTileClick) {
-  var el = makeDiv(px, py, hudElement);
+// Kept as an isolated switch so the first board-game-inspired tile pass can be
+// compared with the legacy renderer while the rest of the UI remains untouched.
+var USE_SCROLL_BONUS_TILES = true;
+
+// This small vocabulary intentionally uses CSS and text, rather than game art.
+// It can later be shared by round, favor and town tiles without copying assets.
+var BONUS_GLYPHS = {
+  spade: '♠', cult: '✦', ship: '≋', priest: 'P', dwelling: 'D',
+  tradingpost: 'TP', stronghold: 'SH'
+};
+
+function styleBonusTileText(el, size, weight, color) {
+  el.style.fontSize = size + 'px';
+  el.style.fontFamily = 'Georgia, "Times New Roman", serif';
+  el.style.fontWeight = weight;
+  el.style.color = color;
+  el.style.lineHeight = '1';
+  el.style.textAlign = 'center';
+  el.style.pointerEvents = 'none';
+}
+
+// Shared tile vocabulary. New component renderers should use these helpers so
+// a coin, worker, cult requirement or VP award always reads the same way.
+function drawTileIcon(px, py, icon, parent, compact) {
+  return drawBonusGlyph(px, py, icon, parent, compact);
+}
+
+function drawVPBadge(px, py, amount, parent) {
+  var badge = makeSizedDiv(px, py, 19, 19, parent);
+  badge.style.boxSizing = 'border-box';
+  badge.style.border = '1px solid #6b3f30';
+  badge.style.borderRadius = '50%';
+  badge.style.background = 'radial-gradient(circle at 35% 28%, #f7d794, #b66d43 68%, #75412f)';
+  badge.style.boxShadow = 'inset 0 0 0 2px rgba(255,232,170,.45)';
+  styleBonusTileText(badge, 11, 'bold', '#40251d');
+  badge.style.display = 'flex';
+  badge.style.alignItems = 'center';
+  badge.style.justifyContent = 'center';
+  badge.style.lineHeight = '1';
+  badge.innerHTML = amount;
+  return badge;
+}
+
+function drawCultRequirement(px, py, cult, threshold, parent) {
+  var badge = makeSizedDiv(px, py, 14, 14, parent);
+  badge.style.boxSizing = 'border-box';
+  badge.style.border = '1px solid #5b5142';
+  badge.style.borderRadius = '50%';
+  badge.style.background = getCultColor(cult);
+  badge.style.boxShadow = 'inset 0 1px 1px rgba(255,255,255,.62)';
+  styleBonusTileText(badge, 8, 'bold', cult == C_A ? '#39404a' : '#fff');
+  badge.style.display = 'flex';
+  badge.style.alignItems = 'center';
+  badge.style.justifyContent = 'center';
+  badge.style.lineHeight = '1';
+  badge.innerHTML = threshold;
+  return badge;
+}
+
+// A town reward advances every cult track, so show the complete set rather
+// than a vague "cult" label. One horizontal row makes the four tracks easier
+// to scan in their familiar fire, water, earth, air order.
+function drawCultSetReward(px, py, amount, parent) {
+  var cults = [C_F, C_W, C_E, C_A];
+  for(var i = 0; i < cults.length; i++) {
+    var badge = makeSizedDiv(px + i * 10, py, 9, 9, parent);
+    badge.style.boxSizing = 'border-box';
+    badge.style.border = '1px solid #5b5142';
+    badge.style.borderRadius = '50%';
+    badge.style.background = getCultColor(cults[i]);
+    badge.style.boxShadow = 'inset 0 1px 1px rgba(255,255,255,.58)';
+    styleBonusTileText(badge, 5, 'bold', cults[i] == C_A ? '#39404a' : '#fff');
+    badge.style.display = 'flex';
+    badge.style.alignItems = 'center';
+    badge.style.justifyContent = 'center';
+    badge.style.lineHeight = '1';
+    badge.innerHTML = amount;
+  }
+}
+
+function drawTileArrow(px, py, parent) {
+  var arrow = makeSizedDiv(px, py, 8, 12, parent);
+  styleBonusTileText(arrow, 10, 'bold', '#e9dfc0');
+  arrow.style.lineHeight = '10px';
+  arrow.innerHTML = '›';
+  return arrow;
+}
+
+function drawTileReward(px, py, reward, parent) {
+  if(reward.icon == 'spade' && reward.amount == 1) {
+    var spadeLabel = makeSizedDiv(px, py, 12, 12, parent);
+    styleBonusTileText(spadeLabel, 6, 'bold', '#f3e3bd');
+    spadeLabel.style.display = 'flex';
+    spadeLabel.style.alignItems = 'center';
+    spadeLabel.style.justifyContent = 'center';
+    spadeLabel.innerHTML = 'SPD';
+    return spadeLabel;
+  }
+  return drawBonusResourceAmount(px, py, reward, parent, true);
+}
+
+function drawBonusGlyph(px, py, glyph, parent, compact) {
+  var size = compact ? 12 : 17;
+  var el = makeSizedDiv(px, py, size, size, parent);
+  el.style.boxSizing = 'border-box';
+  el.style.position = 'absolute';
+  el.style.pointerEvents = 'none';
+
+  // Resource tokens are deliberately drawn from simple geometry rather than
+  // borrowing component art: a worker cube, power disc and coin each read at a glance.
+  if(glyph == 'worker') {
+    el.style.width = (size - 3) + 'px';
+    el.style.height = (size - 3) + 'px';
+    el.style.left = (px + 2) + 'px';
+    el.style.top = (py + 2) + 'px';
+    el.style.border = '1px solid #777168';
+    el.style.borderRadius = '1px';
+    el.style.background = 'linear-gradient(135deg, #ffffff 0%, #e9e6dc 58%, #c8c2b4 100%)';
+    el.style.boxShadow = '2px 2px 0 rgba(91,78,59,.24), inset 1px 1px 0 #fff';
+    el.style.transform = 'skewY(-5deg)';
+  } else if(glyph == 'power') {
+    el.style.border = '1px solid #4b2b65';
+    el.style.borderRadius = '50%';
+    el.style.background = 'radial-gradient(circle at 34% 28%, #c789d0, #7b438e 58%, #4b285f 100%)';
+    el.style.boxShadow = 'inset 0 1px 1px rgba(255,255,255,.75), 0 1px 1px rgba(62,33,72,.35)';
+  } else if(glyph == 'coin') {
+    el.style.border = '1px solid #8b6720';
+    el.style.borderRadius = '50%';
+    el.style.background = 'radial-gradient(circle at 34% 28%, #ffe89a, #d6a52d 60%, #9c6d18 100%)';
+    el.style.boxShadow = 'inset 0 0 0 2px rgba(255,238,153,.42), 0 1px 1px rgba(80,54,14,.3)';
+  } else if(glyph == 'priest') {
+    // A compact hooded figure gives priests a stronger silhouette than a
+    // letter badge while remaining distinct from the white worker cube.
+    var priestHood = makeSizedDiv(px + size * 0.23, py + 1, size * 0.54, size * 0.52, parent);
+    priestHood.style.border = '1px solid #654130';
+    priestHood.style.borderRadius = '50% 50% 42% 42%';
+    priestHood.style.background = 'linear-gradient(135deg, #9c654b, #5d362c)';
+    var priestHead = makeSizedDiv(px + size * 0.35, py + size * 0.12, size * 0.30, size * 0.30, parent);
+    priestHead.style.border = '1px solid #755843';
+    priestHead.style.borderRadius = '50%';
+    priestHead.style.background = 'radial-gradient(circle at 36% 28%, #f7e7bf, #c99770)';
+    var priestBody = makeSizedDiv(px + size * 0.19, py + size * 0.43, size * 0.62, size * 0.49, parent);
+    priestBody.style.border = '1px solid #654130';
+    priestBody.style.borderRadius = '45% 45% 15% 15%';
+    priestBody.style.background = 'linear-gradient(90deg, #724334, #f0d9ae 45%, #89523d)';
+    var priestStole = makeSizedDiv(px + size * 0.45, py + size * 0.47, size * 0.10, size * 0.39, parent);
+    priestStole.style.borderRadius = '1px';
+    priestStole.style.background = '#b48232';
+  } else if(glyph == 'spade' || glyph == 'cult') {
+    el.style.border = '1px solid #84522a';
+    el.style.borderRadius = '2px';
+    el.style.clipPath = 'polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)';
+    el.style.background = 'linear-gradient(135deg, #f6c56d, #c77a32)';
+    el.style.boxShadow = 'inset 0 1px 1px rgba(255,248,210,.7)';
+    styleBonusTileText(el, glyph == 'cult' ? (compact ? 4 : 5) : (compact ? 6 : 7), 'bold', '#593518');
+    el.style.lineHeight = (size - 1) + 'px';
+    el.innerHTML = glyph == 'spade' ? 'SPD' : 'CULT';
+  } else if(glyph == 'ship') {
+    el.style.border = '1px solid #3c6475';
+    el.style.borderRadius = '50% 50% 42% 42%';
+    el.style.background = 'linear-gradient(#d6eff5, #7fb3c4)';
+    styleBonusTileText(el, compact ? 7 : 11, 'bold', '#244653');
+    el.style.lineHeight = (size - 1) + 'px';
+    el.innerHTML = BONUS_GLYPHS[glyph];
+  } else if(glyph == 'dwelling' || glyph == 'tradingpost' || glyph == 'stronghold' ||
+            glyph == 'temple' || glyph == 'sanctuary') {
+    var buildingLabels = {dwelling: 'D', tradingpost: 'TP', stronghold: 'SH', temple: 'TE', sanctuary: 'SA'};
+    el.style.border = '1px solid #705039';
+    el.style.borderRadius = '3px';
+    el.style.background = 'linear-gradient(#ecd3a0, #bb8754)';
+    el.style.boxShadow = 'inset 0 1px 1px rgba(255,246,212,.72)';
+    styleBonusTileText(el, compact ? 5 : 7, 'bold', '#482e20');
+    el.style.lineHeight = (size - 1) + 'px';
+    el.innerHTML = buildingLabels[glyph];
+  } else if(glyph == 'town') {
+    el.style.border = '1px solid #705039';
+    el.style.borderRadius = '3px';
+    el.style.background = 'linear-gradient(#d5bb86, #9b704d)';
+    styleBonusTileText(el, compact ? 4 : 5, 'bold', '#412c21');
+    el.style.lineHeight = (size - 1) + 'px';
+    el.innerHTML = 'TOWN';
+  } else {
+    el.style.border = '1px solid #855b2f';
+    el.style.borderRadius = glyph == 'cult' ? '50%' : '3px';
+    el.style.background = '#f7e3a7';
+    el.style.boxShadow = 'inset 0 1px 1px rgba(255,255,255,.8)';
+    styleBonusTileText(el, glyph == 'tradingpost' ? 6 : 10, 'bold', '#51351c');
+    el.style.lineHeight = (size - 1) + 'px';
+    el.innerHTML = BONUS_GLYPHS[glyph] || glyph;
+  }
+  return el;
+}
+
+function drawBonusReward(px, py, reward, parent) {
+  return drawBonusResourceAmount(px, py, reward, parent, false);
+}
+
+function drawBonusResourceAmount(px, py, reward, parent, compact) {
+  var size = compact ? 12 : 17;
+  var glyph = drawBonusGlyph(px, py, reward.icon, parent, compact);
+  var offset = reward.icon == 'worker' ? 2 : 0;
+  var label = makeSizedDiv(px + offset, py, size - offset, size, parent);
+  styleBonusTileText(label, compact ? 7 : 10, 'bold', reward.icon == 'power' ? '#fff7ec' : '#523514');
+  label.style.display = 'flex';
+  label.style.alignItems = 'center';
+  label.style.justifyContent = 'center';
+  label.style.lineHeight = '1';
+
+  // A lone worker cube is its own clear "one worker" pictogram; other amounts
+  // sit directly on their token instead of consuming precious tile space.
+  if((reward.icon == 'worker' || reward.icon == 'priest') && reward.amount == 1) label.innerHTML = '';
+  else label.innerHTML = reward.amount;
+  return glyph;
+}
+
+function drawBonusRewardPair(px, py, first, second, parent) {
+  var rewards = [first, second];
+  for(var i = 0; i < rewards.length; i++) {
+    drawBonusResourceAmount(px + 14, py + i * 23, rewards[i], parent, false);
+  }
+}
+
+function renderLegacyBonusTile(px, py, tile, text1, text2, text3, onTileClick, parent) {
+  parent = parent || hudElement;
+  var el = makeDiv(px, py, parent);
   el.style.border = '1px solid #55a';
   el.style.width = 47;
   el.style.height = 62;
   el.style.backgroundColor = '#ffeebb';
-  var text1el = makeDiv(px + 2, py + 5, hudElement);
-  text1el.innerHTML = text1;
-  var text2el = makeDiv(px + 2, py + 21, hudElement);
-  text2el.innerHTML = text2;
-  var text3el = makeDiv(px + 2, py + 37, hudElement);
-  text3el.innerHTML = text3;
-  if (game.bonustilecoins[tile]) makeText(px, py-12, '+' + game.bonustilecoins[tile] + 'c', hudElement);
+  makeText(px + 2, py + 5, text1, parent);
+  makeText(px + 2, py + 21, text2, parent);
+  makeText(px + 2, py + 37, text3, parent);
+  if (game.bonustilecoins[tile]) makeText(px, py-12, '+' + game.bonustilecoins[tile] + 'c', parent);
 
   if(onTileClick) {
-    var elui = makeSameSizeDiv(el, hudElement);
+    var elui = makeSameSizeDiv(el, parent);
     elui.style.cursor = 'pointer';
-    elui.onclick = function() {
-      onTileClick(tile);
-    };
+    elui.onclick = function() { onTileClick(tile); };
     IEClickHack(elui);
     elui.title = tileToHelpString(tile, true);
   }
-
   return [48, 63];
 }
 
-function drawBonusTile(px, py, tile, onTileClick) {
-  var text1 = '';
-  var text2 = '';
-  var text3 = '';
-  if(tile == T_BON_SPADE_2C) { text1 = 'act:dig'; text2 = ''; text3 = '+2c';}
-  else if(tile == T_BON_CULT_4C) { text1 = 'act:cult'; text2 = ''; text3 = '+4c'; }
-  else if(tile == T_BON_6C) { text1 = ''; text2 = ''; text3 = '+6c'; }
-  else if(tile == T_BON_3PW_SHIP) { text1 = '+ship'; text2 = ''; text3 = '+3pw'; }
-  else if(tile == T_BON_3PW_1W) { text1 = ''; text2 = '+1w'; text3 = '+3pw'; }
-  else if(tile == T_BON_PASSDVP_2C) { text1 = 'pass:'; text2 = 'D 1vp'; text3 = '+2c'; }
-  else if(tile == T_BON_PASSTPVP_1W) { text1 = 'pass:'; text2 = 'TP 2vp'; text3 = '+1w'; }
-  else if(tile == T_BON_PASSSHSAVP_2W) { text1 = 'pass:'; text2 = 'S 4vp'; text3 = '+2w'; }
-  else if(tile == T_BON_1P) { text1 = ''; text2 = ''; text3 = '+1p'; }
-  else if(tile == T_BON_PASSSHIPVP_3PW) { text1 = 'pass:'; text2 = 'shipvp'; text3 = '+3pw'; }
-  return renderBonusTile(px, py, tile, text1, text2, text3, onTileClick);
-}
+function renderBonusTile(px, py, tile, details, onTileClick, parent) {
+  parent = parent || hudElement;
+  if(!USE_SCROLL_BONUS_TILES) {
+    return renderLegacyBonusTile(px, py, tile, details.legacy1, details.legacy2, details.legacy3, onTileClick, parent);
+  }
 
-function renderFavorTile(px, py, tile, cult, num, text1, text2, onTileClick) {
-  var el = makeDiv(px, py, hudElement);
-  el.style.border = '1px solid #aaa';
-  el.style.width = 70;
-  el.style.height = 60;
-  el.style.backgroundColor = '#eedd00';
-  el.style.borderRadius = '12px';
-  var cultcolor = getCultColor(cult);
-  var culttext = num == 1 ? 'o' : num == 2 ? 'oo' : 'ooo';
-  var text1el = makeDiv(px + 5, py + 5, hudElement);
-  text1el.style.color = 'black';
-  text1el.style.backgroundColor = cultcolor;
-  text1el.innerHTML = culttext;
-  var text2el = makeDiv(px + 5, py + 25, hudElement);
-  text2el.innerHTML = text1;
-  var text3el = makeDiv(px + 5, py + 40, hudElement);
-  text3el.innerHTML = text2;
+  // A tall parchment scroll stays within the legacy 48x63 layout slot.
+  var el = makeSizedDiv(px + 2, py, 43, 62, parent);
+  el.style.boxSizing = 'border-box';
+  el.style.border = '1px solid #785936';
+  el.style.borderRadius = '4px';
+  el.style.background = 'linear-gradient(90deg, #d3ae70 0%, #f8e7b5 13%, #fff5d6 50%, #ecd194 87%, #c39757 100%)';
+  el.style.boxShadow = '0 2px 3px rgba(55,33,13,.42), inset 0 0 0 1px #fff5d2';
+
+  var inner = makeSizedDiv(px + 6, py + 6, 35, 50, parent);
+  inner.style.boxSizing = 'border-box';
+  inner.style.borderLeft = '1px solid rgba(119,79,39,.40)';
+  inner.style.borderRight = '1px solid rgba(119,79,39,.40)';
+  inner.style.pointerEvents = 'none';
+
+  // Rolled paper ends create the silhouette without relying on an image asset.
+  var topRoll = makeSizedDiv(px + 1, py + 1, 45, 6, parent);
+  topRoll.style.border = '1px solid #795733';
+  topRoll.style.borderRadius = '4px';
+  topRoll.style.background = 'linear-gradient(#f9e9b7, #b98344 48%, #f6d99a)';
+  topRoll.style.boxShadow = '0 1px 1px rgba(78,47,20,.32)';
+  topRoll.style.pointerEvents = 'none';
+  var bottomRoll = makeSizedDiv(px + 1, py + 55, 45, 6, parent);
+  bottomRoll.style.border = '1px solid #795733';
+  bottomRoll.style.borderRadius = '4px';
+  bottomRoll.style.background = 'linear-gradient(#f8dda0, #b98344 52%, #f7e7ba)';
+  bottomRoll.style.boxShadow = '0 -1px 1px rgba(78,47,20,.22)';
+  bottomRoll.style.pointerEvents = 'none';
+
+  if(details.resourceOnly) {
+    drawBonusResourceAmount(px + 13, py + 21, details.reward, parent, false);
+  } else if(details.resourcePair) {
+    drawBonusRewardPair(px, py + 9, details.reward, details.reward2, parent);
+  } else {
+    drawBonusGlyph(px + 14, py + 11, details.icon, parent, false);
+    if(details.boost) {
+      var boost = makeSizedDiv(px + 29, py + 10, 10, 9, parent);
+      boost.style.border = '1px solid #496b77';
+      boost.style.borderRadius = '50%';
+      boost.style.background = '#e5f3f2';
+      styleBonusTileText(boost, 7, 'bold', '#2a5360');
+      boost.style.lineHeight = '8px';
+      boost.innerHTML = '+1';
+    }
+    if(details.pass) {
+      var passMark = makeSizedDiv(px + 5, py + 9, 9, 9, parent);
+      styleBonusTileText(passMark, 10, 'bold', '#79502e');
+      passMark.style.lineHeight = '8px';
+      passMark.innerHTML = '↩';
+    }
+    if(details.score) {
+      var score = makeSizedDiv(px + 5, py + 30, 37, 8, parent);
+      styleBonusTileText(score, 8, 'bold', '#804025');
+      score.innerHTML = details.score;
+    }
+    if(details.reward && details.score) drawBonusResourceAmount(px + 16, py + 39, details.reward, parent, true);
+    else if(details.reward) drawBonusReward(px + 13, py + 32, details.reward, parent);
+  }
+
+  if(game.bonustilecoins[tile]) {
+    var coins = makeSizedDiv(px + 4, py - 11, 39, 10, parent);
+    styleBonusTileText(coins, 8, 'bold', '#6f481f');
+    coins.innerHTML = '● +' + game.bonustilecoins[tile];
+  }
 
   if(onTileClick) {
-    var elui = makeSameSizeDiv(el, hudElement);
+    var elui = makeSameSizeDiv(el, parent);
     elui.style.cursor = 'pointer';
-    elui.onclick = function() {
-      onTileClick(tile);
-    };
+    elui.onclick = function() { onTileClick(tile); };
+    IEClickHack(elui);
+    elui.title = tileToHelpString(tile, true);
+  }
+  return [48, 63];
+}
+
+function drawBonusTile(px, py, tile, onTileClick, parent) {
+  var details = {kind: 'INCOME', icon: 'coin', title: 'COINS', reward: null,
+                 legacy1: '', legacy2: '', legacy3: ''};
+  if(tile == T_BON_SPADE_2C) {
+    details = {kind: 'ACTION', icon: 'spade', title: 'FREE DIG', reward: {icon: 'coin', amount: 2}, legacy1: 'act:dig', legacy2: '', legacy3: '+2c'};
+  } else if(tile == T_BON_CULT_4C) {
+    details = {kind: 'ACTION', icon: 'cult', title: 'CULT STEP', reward: {icon: 'coin', amount: 4}, legacy1: 'act:cult', legacy2: '', legacy3: '+4c'};
+  } else if(tile == T_BON_6C) {
+    details.reward = {icon: 'coin', amount: 6}; details.resourceOnly = true; details.legacy3 = '+6c';
+  } else if(tile == T_BON_3PW_SHIP) {
+    details = {kind: 'REACH', icon: 'ship', title: 'SHIPPING', boost: true, reward: {icon: 'power', amount: 3}, legacy1: '+ship', legacy2: '', legacy3: '+3pw'};
+  } else if(tile == T_BON_3PW_1W) {
+    details = {kind: 'INCOME', icon: 'worker', title: 'WORKER', reward: {icon: 'power', amount: 3}, reward2: {icon: 'worker', amount: 1}, resourcePair: true, legacy1: '', legacy2: '+1w', legacy3: '+3pw'};
+  } else if(tile == T_BON_PASSDVP_2C) {
+    details = {kind: 'PASS', icon: 'dwelling', title: 'DWELLING', pass: true, score: '1 VP', reward: {icon: 'coin', amount: 2}, legacy1: 'pass:', legacy2: 'D 1vp', legacy3: '+2c'};
+  } else if(tile == T_BON_PASSTPVP_1W) {
+    details = {kind: 'PASS', icon: 'tradingpost', title: 'TRADING POST', pass: true, score: '2 VP', reward: {icon: 'worker', amount: 1}, legacy1: 'pass:', legacy2: 'TP 2vp', legacy3: '+1w'};
+  } else if(tile == T_BON_PASSSHSAVP_2W) {
+    details = {kind: 'PASS', icon: 'stronghold', title: 'SH / SA', pass: true, score: '4 VP', reward: {icon: 'worker', amount: 2}, legacy1: 'pass:', legacy2: 'S 4vp', legacy3: '+2w'};
+  } else if(tile == T_BON_1P) {
+    details = {kind: 'INCOME', icon: 'priest', title: 'PRIEST', reward: {icon: 'priest', amount: 1}, resourceOnly: true, legacy1: '', legacy2: '', legacy3: '+1p'};
+  } else if(tile == T_BON_PASSSHIPVP_3PW) {
+    details = {kind: 'PASS', icon: 'ship', title: 'SHIPPING', pass: true, score: '3 VP', reward: {icon: 'power', amount: 3}, legacy1: 'pass:', legacy2: 'shipvp', legacy3: '+3pw'};
+  }
+  return renderBonusTile(px, py, tile, details, onTileClick, parent);
+}
+
+function drawFavorCultSteps(px, py, cult, amount, parent) {
+  var diameter = 10;
+  var gap = 2;
+  var height = amount * diameter + (amount - 1) * gap;
+  var startY = py + (34 - height) / 2;
+  for(var i = 0; i < amount; i++) {
+    var pip = makeSizedDiv(px, startY + i * (diameter + gap), diameter, diameter, parent);
+    pip.style.boxSizing = 'border-box';
+    pip.style.border = '1px solid #574a3d';
+    pip.style.borderRadius = '50%';
+    pip.style.background = 'radial-gradient(circle at 35% 28%, rgba(255,255,255,.66), ' + getCultColor(cult) + ' 64%, rgba(53,42,29,.32))';
+    pip.style.boxShadow = 'inset 0 0 0 1px rgba(255,246,211,.35), 0 1px 1px rgba(66,47,25,.25)';
+  }
+}
+
+function drawFavorText(px, py, width, height, value, size, parent) {
+  var label = makeSizedDiv(px, py, width, height, parent);
+  styleBonusTileText(label, size, 'bold', '#543722');
+  label.style.display = 'flex';
+  label.style.alignItems = 'center';
+  label.style.justifyContent = 'center';
+  label.style.lineHeight = '1';
+  label.innerHTML = value;
+  return label;
+}
+
+function drawFavorReward(px, py, details, parent) {
+  if(details.kind == 'resource') {
+    drawBonusResourceAmount(px + 8, py + 16, details.reward, parent, false);
+  } else if(details.kind == 'resources') {
+    drawBonusResourceAmount(px + 10, py + 6, details.reward, parent, true);
+    drawBonusResourceAmount(px + 10, py + 28, details.reward2, parent, true);
+  } else if(details.kind == 'town') {
+    drawFavorText(px + 2, py + 10, 32, 10, 'TOWN', 7, parent);
+    drawFavorText(px + 2, py + 25, 32, 10, 'SIZE 6', 7, parent);
+  } else if(details.kind == 'cultAction') {
+    drawFavorText(px + 2, py + 9, 32, 10, 'CULT', 7, parent);
+    var actionBadge = makeSizedDiv(px + 5, py + 22, 26, 13, parent);
+    actionBadge.style.boxSizing = 'border-box';
+    actionBadge.style.border = '1px solid #84522a';
+    actionBadge.style.borderRadius = '3px';
+    actionBadge.style.background = 'linear-gradient(135deg, #f6c56d, #c77a32)';
+    styleBonusTileText(actionBadge, 7, 'bold', '#593518');
+    actionBadge.style.display = 'flex';
+    actionBadge.style.alignItems = 'center';
+    actionBadge.style.justifyContent = 'center';
+    actionBadge.innerHTML = 'ACT +1';
+  } else if(details.kind == 'score') {
+    drawTileIcon(px + 12, py + 8, details.building, parent, true);
+    drawFavorText(px + 3, py + 25, 30, 12, details.vp + ' VP', 8, parent);
+  } else if(details.kind == 'passScore') {
+    drawFavorText(px + 2, py + 6, 32, 10, 'TP PASS', 6, parent);
+    drawFavorText(px + 1, py + 19, 34, 10, '2/3/3/4', 7, parent);
+    drawFavorText(px + 2, py + 30, 32, 8, 'VP', 6, parent);
+  }
+}
+
+function renderFavorTile(px, py, tile, details, onTileClick, parent) {
+  parent = parent || hudElement;
+  var el = makeSizedDiv(px, py, 70, 50, parent);
+  el.style.boxSizing = 'border-box';
+  el.style.border = '2px solid #5a4736';
+  el.style.borderRadius = '3px';
+  el.style.background = 'linear-gradient(135deg, #a77b42, #e8ca7c 15%, #f8e8af 54%, #b78549)';
+  el.style.boxShadow = '0 2px 3px rgba(52,35,18,.4), inset 0 0 0 1px #fff3c9';
+
+  var inner = makeSizedDiv(px + 4, py + 4, 62, 42, parent);
+  inner.style.boxSizing = 'border-box';
+  inner.style.border = '1px solid rgba(106,74,42,.55)';
+  inner.style.pointerEvents = 'none';
+
+  if(details.cultOnly) {
+    // These tiles solely advance a cult three spaces, so their centered
+    // vertical stack is the entire component's visual hierarchy.
+    drawFavorCultSteps(px + 30, py + 8, details.cult, 3, parent);
+  } else {
+    drawFavorCultSteps(px + 12, py + 8, details.cult, details.cultAmount, parent);
+    var divider = makeSizedDiv(px + 34, py + 7, 1, 36, parent);
+    divider.style.background = 'rgba(101,68,37,.45)';
+    divider.style.pointerEvents = 'none';
+    drawFavorReward(px + 35, py, details, parent);
+  }
+
+  if(onTileClick) {
+    var elui = makeSameSizeDiv(el, parent);
+    elui.style.cursor = 'pointer';
+    elui.onclick = function() { onTileClick(tile); };
     IEClickHack(elui);
     elui.title = tileToHelpString(tile, true);
   }
 
-  return [71, 61];
+  return [71, 51];
 }
 
-function drawFavorTile(px, py, tile, onTileClick) {
-  var text1 = '';
-  var text2 = '';
-  var num;
-  var cult;
-  if(tile == T_FAV_3F) { num = 3; cult = C_F; }
-  else if(tile == T_FAV_3W) { num = 3; cult = C_W; }
-  else if(tile == T_FAV_3E) { num = 3; cult = C_E; }
-  else if(tile == T_FAV_3A) { num = 3; cult = C_A; }
-  else if(tile == T_FAV_2F_6TW) { text1 = 'tw:'; text2 = 'size 6'; num = 2; cult = C_F; }
-  else if(tile == T_FAV_2W_CULT) { text1 = 'act:'; text2 = 'cult'; num = 2; cult = C_W; }
-  else if(tile == T_FAV_2E_1PW1W) { text1 = '+1pw'; text2 = '+1w'; num = 2; cult = C_E; }
-  else if(tile == T_FAV_2A_4PW) { text1 = '+4pw'; num = 2; cult = C_A; }
-  else if(tile == T_FAV_1F_3C) { text1 = '+3c'; num = 1; cult = C_F; }
-  else if(tile == T_FAV_1W_TPVP) { text1 = 'tp: 3vp'; num = 1; cult = C_W; }
-  else if(tile == T_FAV_1E_DVP) { text1 = 'd: 2vp'; num = 1; cult = C_E; }
-  else if(tile == T_FAV_1A_PASSTPVP) { text1 = 'tp pass'; text2 = '[2,3,3,4]'; num = 1; cult = C_A; }
-  return renderFavorTile(px, py, tile, cult, num, text1, text2, onTileClick);
+function drawFavorTile(px, py, tile, onTileClick, parent) {
+  var details;
+  if(tile == T_FAV_3F) details = {cult: C_F, cultOnly: true};
+  else if(tile == T_FAV_3W) details = {cult: C_W, cultOnly: true};
+  else if(tile == T_FAV_3E) details = {cult: C_E, cultOnly: true};
+  else if(tile == T_FAV_3A) details = {cult: C_A, cultOnly: true};
+  else if(tile == T_FAV_2F_6TW) details = {cult: C_F, cultAmount: 2, kind: 'town'};
+  else if(tile == T_FAV_2W_CULT) details = {cult: C_W, cultAmount: 2, kind: 'cultAction'};
+  else if(tile == T_FAV_2E_1PW1W) details = {cult: C_E, cultAmount: 2, kind: 'resources', reward: {icon: 'power', amount: 1}, reward2: {icon: 'worker', amount: 1}};
+  else if(tile == T_FAV_2A_4PW) details = {cult: C_A, cultAmount: 2, kind: 'resource', reward: {icon: 'power', amount: 4}};
+  else if(tile == T_FAV_1F_3C) details = {cult: C_F, cultAmount: 1, kind: 'resource', reward: {icon: 'coin', amount: 3}};
+  else if(tile == T_FAV_1W_TPVP) details = {cult: C_W, cultAmount: 1, kind: 'score', building: 'tradingpost', vp: 3};
+  else if(tile == T_FAV_1E_DVP) details = {cult: C_E, cultAmount: 1, kind: 'score', building: 'dwelling', vp: 2};
+  else if(tile == T_FAV_1A_PASSTPVP) details = {cult: C_A, cultAmount: 1, kind: 'passScore'};
+  else return [0, 0];
+  return renderFavorTile(px, py, tile, details, onTileClick, parent);
 }
 
-function renderRoundTile(px, py, tile, cult, num, text1, text2, index) {
-  var el = makeDiv(px, py, hudElement);
-  el.style.border = '1px solid black';
-  el.style.width = 70;
-  el.style.height = 60;
-  if(index > state.round) el.style.backgroundColor = '#88a';
-  else if(index == state.round && state.type != S_GAME_OVER) el.style.backgroundColor = '#88ff88';
-  else el.style.backgroundColor = '#444444';
+// The rules engine already pauses on these states. This visual layer presents
+// that paused decision as a focused picker instead of asking the player to
+// locate a small tile elsewhere on the board.
+function drawTileChoiceModal(choice, player) {
+  popupElement.innerHTML = '';
 
-  el.title = tileToHelpString(tile, true);
+  var titles = {
+    bonus: 'Choose a bonus tile',
+    favor: 'Choose a favor tile',
+    town: 'Choose a town reward'
+  };
+  var subtitles = {
+    bonus: 'Passing: choose one available bonus tile for the next round.',
+    favor: 'Choose one available favor tile.',
+    town: 'Your town is formed: choose one available town reward.'
+  };
+  var panelX = 92;
+  var panelY = 115;
+  var panelW = 620;
+  var panelH = choice == 'favor' ? 262 : 154;
 
-  var text2el = makeDiv(px + 5, py + 5, hudElement);
-  text2el.innerHTML = text1;
+  var backdrop = makeSizedDiv(0, 0, 1085, 900, popupElement);
+  backdrop.style.zIndex = 2000;
+  backdrop.style.background = 'rgba(39,29,20,.45)';
 
-  if(index != 6) {
-    var cultcolor = getCultColor(cult);
-    var culttext = num == 1 ? 'o' : num == 2 ? 'oo' : num == 3 ? 'ooo' : 'oooo';
-    var text1el = makeDiv(px + 5, py + 25, hudElement);
-    text1el.style.color = 'black';
-    text1el.style.backgroundColor = cultcolor;
-    text1el.innerHTML = culttext;
-    var text3el = makeDiv(px + 5, py + 40, hudElement);
-    text3el.innerHTML = text2;
+  var panel = makeSizedDiv(panelX, panelY, panelW, panelH, popupElement);
+  panel.style.zIndex = 2001;
+  panel.style.boxSizing = 'border-box';
+  panel.style.border = '3px solid #553d2b';
+  panel.style.borderRadius = '10px';
+  panel.style.background = 'linear-gradient(135deg, #8e673f, #e2c17e 9%, #fff0c6 52%, #b77f43)';
+  panel.style.boxShadow = '0 8px 18px rgba(25,17,10,.45), inset 0 0 0 2px rgba(255,247,214,.7)';
+
+  var title = makeSizedDiv(panelX + 18, panelY + 14, panelW - 36, 22, popupElement);
+  title.style.zIndex = 2002;
+  styleBonusTileText(title, 16, 'bold', '#4b3020');
+  title.style.textAlign = 'left';
+  title.innerHTML = titles[choice];
+  var subtitle = makeSizedDiv(panelX + 18, panelY + 39, panelW - 36, 14, popupElement);
+  subtitle.style.zIndex = 2002;
+  styleBonusTileText(subtitle, 8, 'normal', '#60442d');
+  subtitle.style.textAlign = 'left';
+  subtitle.innerHTML = subtitles[choice];
+
+  // Tile renderers create several absolute children. Keep all of them in a
+  // layer above the backdrop and panel rather than assigning z-indexes to
+  // every individual fragment of each tile.
+  var choicesLayer = makeSizedDiv(0, 0, 1085, 900, popupElement);
+  choicesLayer.style.zIndex = 2003;
+
+  function choose(tile) {
+    return function() {
+      if(tileClickFun) tileClickFun(tile);
+    };
   }
 
-  var text4el = makeDiv(px + 1, py - 12, hudElement);
-  text4el.innerHTML = 'round ' + index;
+  if(choice == 'bonus') {
+    var bonusX = panelX + 55;
+    var bonusY = panelY + 68;
+    var bonusColumn = 0;
+    for(var bonus = T_BON_BEGIN + 1; bonus < T_BON_END; bonus++) {
+      if(game.bonustiles[bonus] > 0) {
+        drawBonusTile(bonusX + bonusColumn * 62, bonusY, bonus, choose(bonus), choicesLayer);
+        bonusColumn++;
+      }
+    }
+  } else if(choice == 'town') {
+    var townX = panelX + 52;
+    var townY = panelY + 72;
+    var townColumn = 0;
+    for(var town = T_TW_BEGIN + 1; town < T_TW_END; town++) {
+      if(game.towntiles[town] > 0) {
+        drawTownTile(townX + townColumn * 64, townY, town, choose(town), choicesLayer);
+        townColumn++;
+      }
+    }
+  } else {
+    var columns = [
+      [T_FAV_3F, T_FAV_2F_6TW, T_FAV_1F_3C],
+      [T_FAV_3W, T_FAV_2W_CULT, T_FAV_1W_TPVP],
+      [T_FAV_3E, T_FAV_2E_1PW1W, T_FAV_1E_DVP],
+      [T_FAV_3A, T_FAV_2A_4PW, T_FAV_1A_PASSTPVP]
+    ];
+    for(var column = 0; column < columns.length; column++) {
+      for(var row = 0; row < columns[column].length; row++) {
+        var favor = columns[column][row];
+        if(game.favortiles[favor] > 0 && !player.favortiles[favor]) {
+          drawFavorTile(panelX + 106 + column * 104, panelY + 67 + row * 57,
+              favor, choose(favor), choicesLayer);
+        }
+      }
+    }
+  }
+}
+
+function renderRoundTile(px, py, tile, details, index) {
+  var el = makeSizedDiv(px, py, 70, 60, hudElement);
+  el.style.boxSizing = 'border-box';
+  el.style.border = '2px solid #322d3d';
+  el.style.borderRadius = '4px';
+  if(index > state.round) el.style.background = 'linear-gradient(135deg, #77758d, #4f506b)';
+  else if(index == state.round && state.type != S_GAME_OVER) el.style.background = 'linear-gradient(135deg, #9a9a57, #6d7244)';
+  else el.style.background = 'linear-gradient(135deg, #595561, #34323b)';
+  el.style.boxShadow = '0 2px 3px rgba(20,17,25,.38), inset 0 0 0 1px rgba(238,224,180,.38)';
+  el.title = tileToHelpString(tile, true);
+
+  var inner = makeSizedDiv(px + 4, py + 4, 62, 52, hudElement);
+  inner.style.boxSizing = 'border-box';
+  inner.style.border = '1px solid rgba(238,224,180,.48)';
+  inner.style.pointerEvents = 'none';
+
+  drawTileIcon(px + 7, py + 6, details.trigger, hudElement, false);
+  if(details.triggerLabel) {
+    var triggerLabel = makeSizedDiv(px + 4, py + 21, 24, 7, hudElement);
+    styleBonusTileText(triggerLabel, 5, 'bold', '#f5ecd1');
+    triggerLabel.innerHTML = details.triggerLabel;
+  }
+  drawTileArrow(px + 29, py + 9, hudElement);
+  drawVPBadge(px + 43, py + 6, details.vp, hudElement);
+
+  var divider = makeSizedDiv(px + 6, py + 29, 58, 1, hudElement);
+  divider.style.background = 'rgba(238,224,180,.58)';
+  divider.style.fontSize = '0%';
+
+  if(details.cult == 'priest') {
+    drawTileIcon(px + 8, py + 35, 'priest', hudElement, true);
+    var priestLabel = makeSizedDiv(px + 20, py + 38, 13, 8, hudElement);
+    styleBonusTileText(priestLabel, 7, 'bold', '#f6efd9');
+    priestLabel.style.textAlign = 'left';
+    priestLabel.innerHTML = '×';
+  } else {
+    drawCultRequirement(px + 7, py + 34, details.cult, details.threshold, hudElement);
+  }
+  drawTileArrow(px + 35, py + 36, hudElement);
+  drawTileReward(px + 47, py + 34, details.reward, hudElement);
+
+  var roundLabel = makeSizedDiv(px + 2, py - 12, 66, 10, hudElement);
+  styleBonusTileText(roundLabel, 8, 'bold', '#493f38');
+  roundLabel.style.textAlign = 'left';
+  roundLabel.innerHTML = 'ROUND ' + index;
 
   return [71, 61];
 }
 
 function drawRoundTile(px, py, tile, index) {
-  var text1 = '';
-  var text2 = '';
-  var num;
-  var cult;
-
-  if(tile == T_ROUND_DIG2VP_1E1C) { text1 = 'dig: 2vp'; text2 = '1C'; num = 1; cult = C_E; }
-  else if(tile == T_ROUND_TW5VP_4E1DIG) { text1 = 'TW: 5vp'; text2 = 'dig'; num = 4; cult = C_E; }
-  else if(tile == T_ROUND_D2VP_4W1P) { text1 = 'D:2VP'; text2 = '1P'; num = 4; cult = C_W; }
-  else if(tile == T_ROUND_SHSA5VP_2F1W) { text1 = 'SH/SA:5vp'; text2 = '1W'; num = 2; cult = C_F; }
-  else if(tile == T_ROUND_D2VP_4F4PW) { text1 = 'D: 2vp'; text2 = '4PW'; num = 4; cult = C_F; }
-  else if(tile == T_ROUND_TP3VP_4W1DIG) { text1 = 'TP: 3vp'; text2 = 'dig'; num = 4; cult = C_W; }
-  else if(tile == T_ROUND_SHSA5VP_2A1W) { text1 = 'SH/SA:5vp'; text2 = '1W'; num = 2; cult = C_A; }
-  else if(tile == T_ROUND_TP3VP_4A1DIG) { text1 = 'TP: 3vp'; text2 = 'dig'; num = 4; cult = C_A; }
-  else if(tile == T_ROUND_TE4VP_P2C) { text1 = 'TE: 4vp'; text2 = '2c'; num = 1; cult = 'P'; }
-  else return [0, 0];
-  return renderRoundTile(px, py, tile, cult, num, text1, text2, index);
+  var details;
+  if(tile == T_ROUND_DIG2VP_1E1C) {
+    details = {trigger: 'spade', vp: 2, cult: C_E, threshold: 1, reward: {icon: 'coin', amount: 1}};
+  } else if(tile == T_ROUND_TW5VP_4E1DIG) {
+    details = {trigger: 'town', vp: 5, cult: C_E, threshold: 4, reward: {icon: 'spade', amount: 1}};
+  } else if(tile == T_ROUND_D2VP_4W1P) {
+    details = {trigger: 'dwelling', vp: 2, cult: C_W, threshold: 4, reward: {icon: 'priest', amount: 1}};
+  } else if(tile == T_ROUND_SHSA5VP_2F1W) {
+    details = {trigger: 'stronghold', vp: 5, cult: C_F, threshold: 2, reward: {icon: 'worker', amount: 1}};
+  } else if(tile == T_ROUND_D2VP_4F4PW) {
+    details = {trigger: 'dwelling', vp: 2, cult: C_F, threshold: 4, reward: {icon: 'power', amount: 4}};
+  } else if(tile == T_ROUND_TP3VP_4W1DIG) {
+    details = {trigger: 'tradingpost', vp: 3, cult: C_W, threshold: 4, reward: {icon: 'spade', amount: 1}};
+  } else if(tile == T_ROUND_SHSA5VP_2A1W) {
+    details = {trigger: 'stronghold', vp: 5, cult: C_A, threshold: 2, reward: {icon: 'worker', amount: 1}};
+  } else if(tile == T_ROUND_TP3VP_4A1DIG) {
+    details = {trigger: 'tradingpost', vp: 3, cult: C_A, threshold: 4, reward: {icon: 'spade', amount: 1}};
+  } else if(tile == T_ROUND_TE4VP_P2C) {
+    details = {trigger: 'temple', vp: 4, cult: 'priest', reward: {icon: 'coin', amount: 2}};
+  } else return [0, 0];
+  return renderRoundTile(px, py, tile, details, index);
 }
 
 //returns draw width
@@ -617,6 +1134,40 @@ function drawTilesMap(px, py, tiles, maxWidth, startX, onTileClick) {
     }
   }
   return [px2, py2];
+}
+
+// Favor tiles have a fixed 4-by-3 family layout: each cult is a column,
+// ordered fire, water, earth, air; each row is the 3-, 2-, then 1-step tile.
+// Keeping slots stable makes the available choices much quicker to scan.
+function drawFavorTilesGrid(px, py, tiles, onTileClick) {
+  var columns = [
+    [T_FAV_3F, T_FAV_2F_6TW, T_FAV_1F_3C],
+    [T_FAV_3W, T_FAV_2W_CULT, T_FAV_1W_TPVP],
+    [T_FAV_3E, T_FAV_2E_1PW1W, T_FAV_1E_DVP],
+    [T_FAV_3A, T_FAV_2A_4PW, T_FAV_1A_PASSTPVP]
+  ];
+  for(var column = 0; column < columns.length; column++) {
+    for(var row = 0; row < columns[column].length; row++) {
+      var tile = columns[column][row];
+      var amount = tiles[tile] || 0;
+      if(amount > 0) {
+        var tileX = px + column * 75;
+        var tileY = py + row * 54;
+        drawFavorTile(tileX, tileY, tile, onTileClick);
+        if(amount > 1) {
+          var count = makeSizedDiv(tileX + 52, tileY + 3, 13, 8, hudElement);
+          styleBonusTileText(count, 6, 'bold', '#543722');
+          count.style.display = 'flex';
+          count.style.alignItems = 'center';
+          count.style.justifyContent = 'center';
+          count.style.borderRadius = '3px';
+          count.style.background = 'rgba(255,244,201,.78)';
+          count.innerHTML = amount + '×';
+        }
+      }
+    }
+  }
+  return [295, 158];
 }
 
 function drawTilesArray(px, py, tiles, maxWidth, startX, onTileClick) {
@@ -886,7 +1437,7 @@ function drawHud2(players, onTileClickMain) {
   drawTilesArray(5, 520, game.roundtiles, 500, 5, onTileClickMain);
   drawTilesMap(5, 595, game.bonustiles, 500, 5, onTileClickMain);
   drawTilesMap(5, 675, game.towntiles, 500, 5, onTileClickMain);
-  drawTilesMap(5, 735, game.favortiles, 450, 5, onTileClickMain);
+  drawFavorTilesGrid(5, 735, game.favortiles, onTileClickMain);
   drawFinalScoringTile(462, 520, game.finalscoring);
 
   drawCultTracks(/*840*/ 5 + game.bw * 64, 40);
@@ -1015,6 +1566,7 @@ function makeExecButton(player, x, y, parent, executButtonFun, title) {
     execbutton[0].style.backgroundColor = getImageColor(execcolor); //give the execute button the player's faction color
     execbutton[1].style.color = getHighContrastColor(getImageColor(execcolor));
   }
+  return execbutton;
 }
 
 
@@ -1032,6 +1584,9 @@ function drawHumanUI(px, py, playerIndex) {
   ACTIONPANELW = 520;
   ACTIONPANELH = 150;
   var bg = makeSizedDiv(ACTIONPANELX, ACTIONPANELY, ACTIONPANELW, ACTIONPANELH, parent).style.border = '1px solid black';
+
+  if(state.type == S_ACTION && player.human) drawActionPlanSummary(player);
+  else actionPlanSummaryElement = null;
 
   if(showingNextButtonPanel) {
     var bg = makeSizedDiv(ACTIONPANELX, ACTIONPANELY, ACTIONPANELW, ACTIONPANELH, hudElement);
@@ -1054,7 +1609,9 @@ function drawHumanUI(px, py, playerIndex) {
       //draw dwelling to indicate your color
       drawIcon(cx, cy, 0, player.auxcolor, parent);
       drawIcon(cx, cy, B_D, player.woodcolor, parent);
-      makeText(px, py + 2, 'click a valid location on the map to continue', parent);
+      makeText(px, py + 2, 'Choose a highlighted ' + getColorName(player.auxcolor) + ' terrain space.', parent);
+      makeText(px, py + 21, 'Only highlighted spaces are selectable for your starting dwelling.', parent);
+      drawInitialDwellingTargetHints(player, parent);
     }
     else if(humanstate == HS_DIG) {
       var ptype = pactions.length > 0 ? pactions[pactions.length - 1].type : A_NONE; //previous action type
@@ -1103,10 +1660,12 @@ function drawHumanUI(px, py, playerIndex) {
     }
     else if(humanstate == HS_MAP) {
       drawIcon(cx, cy, 0, player.woodcolor, parent);
-      makeText(px, py + 2, 'click a valid location on the map to continue', parent);
+      makeText(px, py + 2, mapActionTargetHelp || 'Select a location on the map to continue.', parent);
       makeText(px, py + 18, last_helptext, parent);
-      var button = makeLinkButton(px, py + 34, 'cancel', parent);
+      drawActionMapTargetHints(parent);
+      var button = makeLinkButton(px, py + 38, 'Cancel map action', parent);
       button.onclick = clearHumanState;
+      styleActionFlowControl(button, 'quiet');
     }
     else if(humanstate == HS_CULT) {
       makeText(px, py + 2, 'click on a cult track, right of the map, to continue', parent);
@@ -1118,24 +1677,134 @@ function drawHumanUI(px, py, playerIndex) {
       drawOrb(cx + 25, cy, S);
     }
     else if(humanstate == HS_BONUS_TILE) {
-      makeText(px, py + 2, 'click on a bonus tile on the left to continue. An example is shown below.', parent);
-      renderBonusTile(cx - 30, cy - 32, T_NONE, '', '?', '', undefined);
+      drawTileChoiceModal('bonus', player);
     }
     else if(humanstate == HS_FAVOR_TILE) {
-      makeText(px, py + 2, 'click on a favor tile on the left to continue. An example is shown below.', parent);
-      renderFavorTile(cx - 30, cy - 32, T_NONE, C_F, 0, '?', '', undefined);
+      drawTileChoiceModal('favor', player);
     }
     else if(humanstate == HS_TOWN_TILE) {
-      makeText(px, py + 2, 'click on a town tile on the left to continue. An example is shown below.', parent);
-      renderTownTile(cx - 30, cy - 32, T_NONE, 0, '?', undefined);
+      drawTileChoiceModal('town', player);
     }
   }
 
   if(game.players.length > 0) drawSummary(px, py + ACTIONPANELH + 5, playerIndex);
 }
 
+// A setup-only overlay that makes legal starting locations immediately
+// discoverable. It does not handle clicks; the normal map overlay below still
+// invokes the rules-backed human callback.
+function drawInitialDwellingTargetHints(player, parent) {
+  var tilesize = 64;
+  for(var y = 0; y < game.bh; y++)
+  for(var x = 0; x < game.bw; x++) {
+    if(!isInitialDwellingTarget(player, x, y)) continue;
+    var co = pixelCo(x, y);
+    var hint = makeSizedDiv(parseInt(mapElement.style.left) + co[0] - tilesize / 2,
+        parseInt(mapElement.style.top) + co[1] - 12, tilesize, 46, parent);
+    hint.style.boxSizing = 'border-box';
+    hint.style.background = 'rgba(255, 238, 145, 0.30)';
+    hint.style.border = '3px solid #ffe58a';
+    hint.style.borderRadius = '50%';
+    hint.style.boxShadow = '0 0 0 2px rgba(92, 62, 27, 0.55), 0 0 12px rgba(255, 218, 95, 0.9)';
+    hint.style.clipPath = 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)';
+    hint.style.pointerEvents = 'none';
+  }
+}
+
+// Used for ordinary build and upgrade modes. The associated predicate is set
+// by the human controller and deliberately describes only targets that are
+// safe to choose; final resource/rule validation still happens on Execute.
+function drawActionMapTargetHints(parent) {
+  if(!mapActionTargetFun) return;
+  var tilesize = 64;
+  for(var y = 0; y < game.bh; y++)
+  for(var x = 0; x < game.bw; x++) {
+    if(!mapActionTargetFun(x, y)) continue;
+    var co = pixelCo(x, y);
+    var hint = makeSizedDiv(parseInt(mapElement.style.left) + co[0] - tilesize / 2,
+        parseInt(mapElement.style.top) + co[1] - 12, tilesize, 46, parent);
+    hint.style.boxSizing = 'border-box';
+    hint.style.background = 'rgba(99, 192, 138, 0.24)';
+    hint.style.border = '3px solid #a8e7b6';
+    hint.style.borderRadius = '50%';
+    hint.style.boxShadow = '0 0 0 2px rgba(42, 91, 54, 0.65), 0 0 12px rgba(100, 210, 130, 0.8)';
+    hint.style.clipPath = 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)';
+    hint.style.pointerEvents = 'none';
+  }
+}
+
+var actionPlanSummaryElement = null;
+
+function updateActionPlanSummary() {
+  if(!actionPlanSummaryElement) return;
+  var plan = pactions.length ? actionsToString(pactions) : 'No actions selected yet.';
+  actionPlanSummaryElement.innerHTML = '<b>TURN PLAN</b><span style="margin-left:9px">' + plan + '</span>';
+  actionPlanSummaryElement.title = pactions.length ? plan : 'Choose actions below, then execute the completed plan.';
+}
+
+function drawActionPlanSummary(player) {
+  actionPlanSummaryElement = actionEl;
+  actionEl.style.boxSizing = 'border-box';
+  actionEl.style.width = '520px';
+  actionEl.style.minHeight = '27px';
+  actionEl.style.padding = '6px 9px';
+  actionEl.style.background = 'linear-gradient(90deg, #3d4a5a, #657286)';
+  actionEl.style.border = '2px solid #2e3744';
+  actionEl.style.borderRadius = '7px';
+  actionEl.style.boxShadow = '0 2px 4px rgba(21, 27, 34, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)';
+  actionEl.style.color = '#f8efd6';
+  actionEl.style.fontSize = '12px';
+  updateActionPlanSummary();
+}
+
+function styleActionFlowControl(button, tone) {
+  button.style.boxSizing = 'border-box';
+  button.style.minHeight = '15px';
+  button.style.padding = '1px 3px';
+  button.style.border = '1px solid ' + (tone == 'quiet' ? '#7c6a54' : '#7c5733');
+  button.style.borderRadius = '3px';
+  button.style.background = tone == 'quiet' ? '#eee5d5' : 'linear-gradient(#fff1c6, #dfb66f)';
+  button.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,.7), 0 1px 1px rgba(67,43,21,.18)';
+  button.style.color = tone == 'quiet' ? '#544633' : '#4a2e18';
+  button.style.fontSize = '10px';
+  button.style.fontWeight = 'bold';
+  button.style.lineHeight = '11px';
+  button.style.textDecoration = 'none';
+}
+
+function drawActionSectionLabel(px, py, text, parent) {
+  var label = makeSizedDiv(px, py, 84, 15, parent);
+  label.style.boxSizing = 'border-box';
+  label.style.padding = '2px 5px';
+  label.style.background = '#5b4635';
+  label.style.borderRadius = '3px';
+  label.style.color = '#f9edc9';
+  label.style.fontSize = '9px';
+  label.style.fontWeight = 'bold';
+  label.style.letterSpacing = '.5px';
+  label.innerHTML = text;
+  return label;
+}
+
+function drawActionPanelFrame(px, py, parent) {
+  var frame = makeSizedDiv(px, py, 405, 145, parent);
+  frame.style.boxSizing = 'border-box';
+  frame.style.padding = '3px';
+  frame.style.background = 'linear-gradient(145deg, #e9d1a1, #f8efd6 45%, #cda976)';
+  frame.style.border = '2px solid #765334';
+  frame.style.borderRadius = '8px';
+  frame.style.boxShadow = 'inset 0 0 0 1px rgba(255,255,255,.6)';
+  for(var row = 0; row < 9; row++) {
+    var stripe = makeSizedDiv(px + 83, py + 2 + row * 16, 318, 14, parent);
+    stripe.style.background = row % 2 ? 'rgba(138,95,51,.09)' : 'rgba(255,255,255,.20)';
+    stripe.style.pointerEvents = 'none';
+  }
+}
+
 function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
   var player = game.players[playerIndex];
+  var actionControlStart = parent.children.length;
+  drawActionPanelFrame(px - 4, py - 4, parent);
 
   //an action that doesn't require coordinates or other parameters
   function addSimpleActionButton(px, py, name, actiontype) {
@@ -1151,7 +1820,7 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
 
   var button;
 
-  makeText(px, py, 'POWER:', parent);
+  drawActionSectionLabel(px, py, 'POWER', parent);
   if(player.getFaction().canTakeAction(player, A_POWER_BRIDGE, game)) {
     button = makeLinkButton(px + 90, py, getActionName(A_POWER_BRIDGE), parent);
     button.title = '3pw to build a bridge';
@@ -1204,7 +1873,7 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
     };
   }
 
-  makeText(px, py + 16, 'CONVERT: ', parent);
+  drawActionSectionLabel(px, py + 16, 'CONVERT', parent);
   addSimpleActionButton(px + 90, py+16, 'burn', A_BURN).title = 'sacrifice power from second bowl to get one in your main bowl';
   addSimpleActionButton(px+130, py+16, '1pw->c', A_CONVERT_1PW_1C);
   addSimpleActionButton(px+188, py+16, '3pw->w', A_CONVERT_3PW_1W);
@@ -1212,7 +1881,7 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
   addSimpleActionButton(px+306, py+16, 'p->w', A_CONVERT_1P_1W);
   addSimpleActionButton(px+348, py+16, 'w->c', A_CONVERT_1W_1C);
 
-  makeText(px, py + 32, 'PRIEST: ', parent);
+  drawActionSectionLabel(px, py + 32, 'PRIEST', parent);
 
   var sendPriestFun = function(type) {
     var fun = function(cult) {
@@ -1244,7 +1913,7 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
   var priest3button = makeLinkButton(px + 240, py + 32, getActionName(A_CULT_PRIEST3), parent);
   priest3button.onclick = bind(sendPriestFun, A_CULT_PRIEST3);
 
-  makeText(px, py + 48, 'TRANSFORM: ', parent);
+  drawActionSectionLabel(px, py + 48, 'BUILD / DIG', parent);
 
   function addDigButton(px, py, text, num, type) {
     var digbutton = makeLinkButton(px, py, text, parent);
@@ -1270,6 +1939,11 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
   buildbutton.title = 'build a dwelling (D) on a tile that is already your color';
   buildbutton.style.color = 'brown';
   buildbutton.onclick = function() {
+    setMapActionTargets('Highlighted spaces are reachable, empty terrain of your color.', function(x, y) {
+      if(player.b_d <= 0 || isOccupied(x, y) || !canBuildOn(player, x, y)) return false;
+      if(player.transformed && !player.transformcoset[arCo(x, y)]) return false;
+      return inReach(player, x, y, false) || onlyReachableThroughFactionSpecial(player, x, y);
+    });
     var fun = function(x, y) {
       clearHumanState();
       var action = new Action(A_BUILD);
@@ -1279,7 +1953,7 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
     queueHumanState(HS_MAP, 'click where to build dwelling', fun);
   };
 
-  makeText(px, py + 64, 'UPGRADE: ', parent);
+  drawActionSectionLabel(px, py + 64, 'UPGRADE', parent);
   var upgr1button = makeLinkButton(px + 90, py + 64, 'upgr1', parent);
   upgr1button.title = 'upgrade to trading post (TP) or to stronghold (SH)';
   upgr1button.onclick = upgrade1fun;
@@ -1287,13 +1961,13 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
   upgr2button.title = 'upgrade to temple (TE) or to sanctuary (SA)';
   upgr2button.onclick = upgrade2fun;
 
-  makeText(px, py + 80, 'ADVANCE: ', parent);
+  drawActionSectionLabel(px, py + 80, 'ADVANCE', parent);
   if(player.digging < player.maxdigging) addSimpleActionButton(px + 90, py + 80, getActionName(A_ADV_DIG), A_ADV_DIG);
   if(player.shipping < player.maxshipping) addSimpleActionButton(px + ((player.digging < player.maxdigging) ? 170 : 90), py + 80, getActionName(A_ADV_SHIP), A_ADV_SHIP);
 
   var px2;
 
-  makeText(px, py + 96, 'TILES: ', parent);
+  drawActionSectionLabel(px, py + 96, 'TILE ACTIONS', parent);
   function addCultButton(px, py, text, num, type) {
     var button = makeLinkButton(px, py, text, parent);
     button.onclick = function() {
@@ -1327,7 +2001,7 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
     px2 += 60;
   }
 
-  makeText(px, py + 112, 'FACTION: ', parent);
+  drawActionSectionLabel(px, py + 112, 'FACTION', parent);
   px2 = px + 90;
   if(player.faction == F_CHAOS && player.b_sh == 0 && !player.octogons[A_DOUBLE]) {
     button = addSimpleActionButton(px2, py + 112, getActionName(A_DOUBLE), A_DOUBLE);
@@ -1430,7 +2104,7 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
     px2 += 60;
   }
 
-  makeText(px, py + 128, 'PASS: ', parent);
+  drawActionSectionLabel(px, py + 128, 'END TURN', parent);
   var passbutton = makeLinkButton(px + 90, py + 128, getActionName(A_PASS), parent);
   passbutton.onclick = function() {
     prepareAction(new Action(A_PASS));
@@ -1438,7 +2112,10 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
   passbutton.title = 'Pass for this round. Click on a chosen bonus tile after this, then press execute';
 
 
-  var execbutton = makeExecButton(player, px + 410, py + 100, parent, executeButtonFun, 'Execute chosen action sequence.\n\nOnly works while doing actions, not during other game decisions (such as leeching power or digging from round bonus).\n\nPress this button after choosing all actions from the left in the correct order. You may do multiple actions, but only one true turn action. For example, you can burn power or convert resources, then dig, then build, convert some more resources, then press execute. Or chaos magicians may do their double action move followed by two turn actions.\n\nIf it fails (e.g. not enough resources), the error message is shown and you can retry with a new action sequence.\n\nSome actions require clicking on the map, a cult track, favor or town tiles before pressing this button. Please see the appropriate messages that appear on screen when you need to do so.');
+  var execbutton = makeExecButton(player, px + 410, py + 100, parent, executeButtonFun, 'Execute the planned action sequence. Map, cult and tile choices are completed before execution.');
+  execbutton[0].style.borderRadius = '8px';
+  execbutton[0].style.boxShadow = '0 3px 5px rgba(50,30,15,.28), inset 0 1px 0 rgba(255,255,255,.35)';
+  execbutton[1].innerHTML = 'EXECUTE';
 
   var clearbutton = makeLinkButton(px + 420, py + 84, 'cancel', parent);
   clearbutton.title = 'remove last action from your action sequence';
@@ -1454,6 +2131,20 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
     }
     alert(text);
   };
+
+  // The existing action callbacks deliberately remain untouched. Give every
+  // textual control drawn in this panel the same compact, board-like button
+  // treatment without changing their positions or gameplay behaviour.
+  for(var i = actionControlStart; i < parent.children.length; i++) {
+    var control = parent.children[i];
+    if(control.style.cursor == 'pointer' && control.innerHTML) styleActionFlowControl(control);
+  }
+  styleActionFlowControl(build2button);
+  styleActionFlowControl(build3button);
+  styleActionFlowControl(buildbutton);
+  styleActionFlowControl(upgr1button);
+  styleActionFlowControl(upgr2button);
+  styleActionFlowControl(passbutton, 'quiet');
 }
 
 //IE hack: IE refuses to have onclick on transparent elements. But first line of tiles.png is see-through. So use it as bg image.
@@ -1479,6 +2170,11 @@ function drawMapClick() {
       var closure_y = y;
       el.onclick = bind(function(x, y) {
         if(mapClickFun) {
+          // During faction setup, never send an invalid hex to the selection
+          // callback. The rules still validate the eventual placement.
+          if(state.type == S_INIT_DWELLING && humanstate == HS_MAP &&
+              !isInitialDwellingTarget(getCurrentPlayer(), x, y)) return;
+          if(mapActionTargetFun && !mapActionTargetFun(x, y)) return;
           mapClickFun(x, y);
         } else if(executeButtonFun_ /*the way to check a human is doing action. TODO: improve that way*/) {
           // An automatic action based on clicking on the map

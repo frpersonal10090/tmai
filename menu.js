@@ -45,66 +45,150 @@ each button fun receives the following object containing the dropdown states:
 */
 function renderPreScreen(px, py, standardButtonFun, randomButtonFun, beginnerButtonFun, quickButtonFun) {
   var parent = hudElement;
+  var setupX = 145;
+  var setupY = 78;
+  var setupW = 800;
 
-  makeText(px, py - 135, 'TM AI: Play TM against AI players.<br/>'
-      + 'Programmed by Lode Vandevenne.<br/>'
-      + 'AI alternates by Lou New.<br/>'
-      + 'Drawings by Giordano Segatta.<br/>'
-      + 'version 20221109<br/>'
-      + 'Links:<br/>'
-      + 'TM on BGG: <a href="http://boardgamegeek.com/boardgame/120677/terra-mystica">http://boardgamegeek.com/boardgame/120677/terra-mystica</a><br/>'
-      + 'Snellman (multiplayer): <a href="http://terra.snellman.net/">http://terra.snellman.net/</a><br/>'
-      + '<br/>'
-      + '*: Choices with an asterix are outside of the regular game rules.<br/>'
-      , parent);
+  var title = makeText(setupX + 6, setupY, 'Terra Mystica AI', parent);
+  title.style.fontFamily = 'Georgia, serif';
+  title.style.fontSize = '30px';
+  title.style.fontWeight = 'bold';
+  title.style.color = '#49311d';
+  var subtitle = makeText(setupX + 8, setupY + 38, 'Start a new game', parent);
+  subtitle.style.fontSize = '15px';
+  subtitle.style.color = '#745438';
 
-  var ppy = py + 20;
-  var numPlayerEl = makeLabeledDropDown(px, ppy, 'Num Players', ['5', '4', '3', '2', '1*'], parent);
+  var setupCard = makeSizedDiv(setupX, setupY + 67, setupW, 260, parent);
+  setupCard.style.boxSizing = 'border-box';
+  setupCard.style.background = 'linear-gradient(145deg, #fff8e3, #e7c98e)';
+  setupCard.style.border = '3px solid #6e4b2d';
+  setupCard.style.borderRadius = '16px';
+  setupCard.style.boxShadow = '0 10px 24px rgba(51, 33, 16, .28), inset 0 0 0 2px rgba(255,255,255,.56)';
+
+  function styleSetupSelect(select, width) {
+    select.style.boxSizing = 'border-box';
+    select.style.width = width + 'px';
+    select.style.height = '27px';
+    select.style.padding = '3px 7px';
+    select.style.background = '#fffaf0';
+    select.style.border = '1px solid #a87848';
+    select.style.borderRadius = '5px';
+    select.style.color = '#3f2a19';
+    select.style.fontWeight = 'bold';
+  }
+
+  function styleSetupLabel(x, y, label) {
+    var el = makeText(x, y, label.toUpperCase(), parent);
+    el.style.fontSize = '10px';
+    el.style.fontWeight = 'bold';
+    el.style.letterSpacing = '.7px';
+    el.style.color = '#6c4b2f';
+  }
+
+  var topY = setupY + 105;
+  styleSetupLabel(setupX + 28, topY, 'Players');
+  var numPlayerEl = makeDropDown(setupX + 28, topY + 17, ['5', '4', '3', '2', '1*'], parent);
+  // Keep the existing select as the state carrier so saving, presets and the
+  // game-start code remain unchanged. The player count itself is presented as
+  // large, direct tap targets instead of a small native dropdown.
+  numPlayerEl.style.display = 'none';
   assignPreferenceToDropdown(numPlayerEl, preferences.numplayersdropdown);
 
-  var startPlayerEl = makeLabeledDropDown(px + 95, ppy, 'Start Player', ['random', 'human', 'ai1', 'ai2', 'ai3', 'ai4'], parent);
+  var playerCountButtons = [];
+  function selectPlayerCount(count) {
+    numPlayerEl.selectedIndex = 5 - count;
+    for(var i = 0; i < playerCountButtons.length; i++) {
+      var button = playerCountButtons[i];
+      var selected = button.playerCount == count;
+      button.style.background = selected ? 'linear-gradient(#a94e32, #762b20)' : '#fffaf0';
+      button.style.borderColor = selected ? '#5d2219' : '#a87848';
+      button.style.color = selected ? '#fff8e5' : '#47301c';
+      button.style.boxShadow = selected ? 'inset 0 1px 0 rgba(255,255,255,.26), 0 2px 3px rgba(72,35,21,.25)' : 'inset 0 1px 0 rgba(255,255,255,.72)';
+    }
+  }
+  for(var count = 2; count <= 5; count++) {
+    var playerButton = makeSizedDiv(setupX + 28 + (count - 2) * 59, topY + 17, 53, 29, parent);
+    playerButton.playerCount = count;
+    playerButton.style.boxSizing = 'border-box';
+    playerButton.style.padding = '6px 0';
+    playerButton.style.border = '1px solid #a87848';
+    playerButton.style.borderRadius = '6px';
+    playerButton.style.cursor = 'pointer';
+    playerButton.style.fontFamily = 'Georgia, serif';
+    playerButton.style.fontSize = '15px';
+    playerButton.style.fontWeight = 'bold';
+    playerButton.style.textAlign = 'center';
+    playerButton.innerHTML = count;
+    playerButton.onclick = bind(selectPlayerCount, count);
+    playerCountButtons.push(playerButton);
+  }
+  var chosenPlayerCount = 5 - numPlayerEl.selectedIndex;
+  selectPlayerCount(chosenPlayerCount >= 2 && chosenPlayerCount <= 5 ? chosenPlayerCount : 2);
+
+  styleSetupLabel(setupX + 300, topY, 'Start player');
+  var startPlayerEl = makeDropDown(setupX + 300, topY + 17, ['random', 'human', 'ai1', 'ai2', 'ai3', 'ai4'], parent);
+  styleSetupSelect(startPlayerEl, 205);
   assignPreferenceToDropdown(startPlayerEl, preferences.startplayerdropdown);
 
-  // It's a checkbox now. It used to be a dropdown with "Human vs AI" and "Observe". TODO: rename everything to checkbox and change the preference to boolean instead of int.
-  var playerTypeDropDown = makeCheckbox(px + 200, ppy, parent, 'Observe (only AIs play)', 'Disable to be able to play yourself against the AIs.');
-  playerTypeDropDown.checked = (preferences.playertypedropdown == 1);
-
-  ppy += 50;
-  var gameTypeDropDown = makeLabeledDropDown(px, ppy, 'Game Type', ['Standard', 'Random*', 'Beginner', 'Quick'], parent);
-  gameTypeDropDown.title = 'Standard: game with standard rules (some rules can be overridden with preset choices below). Random: random faction assigned to players ("choose" dropdowns implicitely turned to "random"). Beginner: official beginner setup, faction based on start position, preset settings ignored. Quick: starts the game immediately in the action, faction choice/initial dwellings/... are automatically set up, use preset dropdown below to ensure a certain faction.';
-  assignPreferenceToDropdown(gameTypeDropDown, preferences.gametypedropdown);
-
-  var worldMapEl = makeLabeledDropDown(px + 100, ppy, 'World Map', worldNames, parent);
+  var bottomY = setupY + 185;
+  styleSetupLabel(setupX + 28, bottomY, 'Map');
+  var worldMapEl = makeDropDown(setupX + 28, bottomY + 17, worldNames, parent);
+  styleSetupSelect(worldMapEl, 245);
   assignPreferenceToDropdown(worldMapEl, preferences.worldmapdropdown);
   worldMapEl.onchange = function() {
     preferences.worldmapdropdown = worldMapEl.selectedIndex; //this one is stored immediately so you can also use this dropdown to choose snellman game type
   };
 
-  var newcultistcb = makeCheckbox(px, ppy + 55, parent, 'New cultists rule', 'The official new rule (2013) where cultists receive 1 power if everyone refuses to take power');
-  newcultistcb.checked = preferences.newcultistsrule;
-  var towntilepromo2013cb = makeCheckbox(px + 160, ppy + 55, parent, 'Town tile promo 2013', 'Enable the new town tiles from the official 2013 mini expansion');
-  towntilepromo2013cb.checked = preferences.towntilepromo2013;
-  var bonustilepromo2013cb = makeCheckbox(px + 350, ppy + 55, parent, 'Bonus tile promo 2013', 'Enable the new bonus tile from the official 2013 mini expansion. If checked, tile may appear randomly just like any other bonus tile.');
-  bonustilepromo2013cb.checked = preferences.bonustilepromo2013;
-  var fireicecb = makeCheckbox(px, ppy + 72, parent, 'Fire & Ice expansion', 'Enable the fire & ice expansion. NOTE: With this checkbox disabled, you can still select expansion worlds, factions and scoring in the preset options below and it will work. Disabling this checkbox will prevent them from being chosen by "random" or by the faction choice in-game.');
-  fireicecb.checked = preferences.fireice;
-  // Variable turnorder by Lou
-  var turnordercb = makeCheckbox(px + 160, ppy + 72, parent, 'Variable Turn Order', 'Enable variable turn order expansion. NOTE: With this checkbox disabled, the original fixed turn order after the first player pass is used.');
-  turnordercb.checked = preferences.turnorder;
-
-  //var louAIcb = makeCheckbox(px + 350, ppy + 72, parent, 'Lou New\'s alternate AI ', 'new AI by Lou New. This AI is  stronger and supports the expansion factions better.');
-  //louAIcb.checked = preferences.aiAlgorithm;
-  var aiTypeDropDown = makeLabeledDropDown(px + 350, ppy, 'AI Type', ['AI_Lode(original)', 'AI_Lou(revised)', 'AI_Level2(ver9)', 'AI_Level3(topFactions)', 'AI_Random_Moves', 'AI_Level5(ver15)', 'AI_Level6(future)'], parent);
+  styleSetupLabel(setupX + 294, bottomY, 'AI level');
+  var aiTypeDropDown = makeDropDown(setupX + 294, bottomY + 17, ['AI_Lode(original)', 'AI_Lou(revised)', 'AI_Level2(ver9)', 'AI_Level3(topFactions)', 'AI_Random_Moves', 'AI_Level5(ver15)', 'AI_Level6(future)'], parent);
+  styleSetupSelect(aiTypeDropDown, 205);
   assignPreferenceToDropdown(aiTypeDropDown, preferences.aiAlgorithm);
 
+  var expansionBox = makeSizedDiv(setupX + 525, bottomY - 1, 245, 53, parent);
+  expansionBox.style.boxSizing = 'border-box';
+  expansionBox.style.padding = '8px 10px';
+  expansionBox.style.background = 'rgba(103, 134, 123, .14)';
+  expansionBox.style.border = '1px solid #78917a';
+  expansionBox.style.borderRadius = '7px';
+  var expansionTitle = makeText(setupX + 538, bottomY + 4, 'EXPANSION', parent);
+  expansionTitle.style.fontSize = '10px';
+  expansionTitle.style.fontWeight = 'bold';
+  expansionTitle.style.letterSpacing = '.7px';
+  expansionTitle.style.color = '#425b47';
+  var fireicecb = makeCheckbox(setupX + 534, bottomY + 20, parent, 'Enable Fire & Ice', 'Enable the Fire & Ice expansion. Disabling it prevents expansion factions from random faction choice.');
+  fireicecb.checked = preferences.fireice;
 
-  var fireiceerratacb = makeCheckbox(px, ppy + 89, parent, 'Fire&Ice Rule 2015', 'The official rule change of 2015, making shapeshifters and riverwalkers less powerful.');
+  var advancedY = setupY + 365;
+  var advancedHeading = makeText(setupX, advancedY, 'Advanced setup & presets', parent);
+  advancedHeading.style.fontFamily = 'Georgia, serif';
+  advancedHeading.style.fontSize = '18px';
+  advancedHeading.style.fontWeight = 'bold';
+  advancedHeading.style.color = '#543922';
+  makeText(setupX + 2, advancedY + 24, 'Optional rules, observation mode, and deterministic setup controls.', parent).style.color = '#76593b';
+
+  // Kept below the quick-start card so the common path stays focused while
+  // existing advanced games and benchmarks retain every previous setting.
+  var playerTypeDropDown = makeCheckbox(setupX, advancedY + 53, parent, 'Observe (only AIs play)', 'Disable to be able to play yourself against the AIs.');
+  playerTypeDropDown.checked = (preferences.playertypedropdown == 1);
+  var newcultistcb = makeCheckbox(setupX + 185, advancedY + 53, parent, 'New cultists rule', 'The official new rule (2013) where cultists receive 1 power if everyone refuses to take power');
+  newcultistcb.checked = preferences.newcultistsrule;
+  var towntilepromo2013cb = makeCheckbox(setupX + 345, advancedY + 53, parent, 'Town tile promo 2013', 'Enable the new town tiles from the official 2013 mini expansion');
+  towntilepromo2013cb.checked = preferences.towntilepromo2013;
+  var bonustilepromo2013cb = makeCheckbox(setupX + 535, advancedY + 53, parent, 'Bonus tile promo 2013', 'Enable the new bonus tile from the official 2013 mini expansion.');
+  bonustilepromo2013cb.checked = preferences.bonustilepromo2013;
+  var turnordercb = makeCheckbox(setupX, advancedY + 76, parent, 'Variable Turn Order', 'Enable variable turn order expansion.');
+  turnordercb.checked = preferences.turnorder;
+  var fireiceerratacb = makeCheckbox(setupX + 185, advancedY + 76, parent, 'Fire & Ice Rule 2015', 'The official Fire & Ice rule change for Shapeshifters and Riverwalkers.');
   fireiceerratacb.checked = preferences.fireiceerrata;
-
-  var roundtilepromo2015cb = makeCheckbox(px + 160, ppy + 89, parent, 'Round tile promo 2015', 'Enable the new round tile (4VP for temple, 2C per cult priest) from the official 2015 mini expansion');
+  var roundtilepromo2015cb = makeCheckbox(setupX + 385, advancedY + 76, parent, 'Round tile promo 2015', 'Enable the 2015 mini-expansion round tile.');
   roundtilepromo2015cb.checked = preferences.roundtilepromo2015;
 
-  ppy += 160;
+  var gameTypeDropDown = makeLabeledDropDown(setupX + 590, advancedY + 49, 'Game Type', ['Standard', 'Random*', 'Beginner', 'Quick'], parent);
+  styleSetupSelect(gameTypeDropDown, 165);
+  gameTypeDropDown.title = 'Standard: choose factions and initial dwellings. Random: assign factions automatically. Beginner: official beginner setup. Quick: start directly in the action phase.';
+  assignPreferenceToDropdown(gameTypeDropDown, preferences.gametypedropdown);
+
+  var ppy = advancedY + 145;
   makeText(px, ppy, 'Preset* factions', parent).title = 'Override faction choice. Set to "choose" to choose the faction during the game according to normal game rules. Set to "random" to assign a random faction. Set to a given faction to assign that faction to this player';
   var factionDropDowns = [];
   for(var i = 0; i < 5; i++) {
@@ -227,15 +311,32 @@ function renderPreScreen(px, py, standardButtonFun, randomButtonFun, beginnerBut
     fun(params);
   }
 
-  ppy = py + 170 + 17;
-  makeButton(px, ppy, 'Start', parent, bind(buttonFun, function(params) {
+  var startButton = makeButton(setupX + 540, setupY + 268, 'START GAME', parent, bind(buttonFun, function(params) {
     if(gameTypeDropDown.selectedIndex == 0) standardButtonFun(params);
     if(gameTypeDropDown.selectedIndex == 1) randomButtonFun(params);
     if(gameTypeDropDown.selectedIndex == 2) beginnerButtonFun(params);
     if(gameTypeDropDown.selectedIndex == 3) quickButtonFun(params);
   }), 'Start a new game');
+  startButton[0].style.width = '230px';
+  startButton[0].style.height = '48px';
+  startButton[0].style.background = 'linear-gradient(#b95032, #762b20)';
+  startButton[0].style.border = '2px solid #562117';
+  startButton[0].style.borderRadius = '9px';
+  startButton[0].style.boxShadow = '0 3px 5px rgba(56, 25, 15, .32), inset 0 1px 0 rgba(255,255,255,.26)';
+  startButton[1].style.width = '230px';
+  startButton[1].style.top = (setupY + 284) + 'px';
+  startButton[1].style.fontFamily = 'Georgia, serif';
+  startButton[1].style.fontSize = '17px';
+  startButton[1].style.letterSpacing = '.7px';
+  startButton[2].style.width = '230px';
+  startButton[2].style.height = '48px';
+  startButton[2].style.borderRadius = '9px';
 
-  makeText(px, py + 480 + 17, '<h3>Documentation:</h3>' +
+  var setupNote = makeText(setupX + 28, setupY + 295, 'Need a custom setup? Advanced options and presets are below.', parent);
+  setupNote.style.color = '#785b3d';
+  setupNote.style.fontSize = '12px';
+
+  makeText(setupX, advancedY + 425, '<h3>Documentation:</h3>' +
     '<h4>Updates</h4>' +
      '<p>20190910: Updated fjords to final version (2.1), and moved some dialogs to action panel instead of obscuring the map. <p/>' +
      '<p>20171014: Updated loon lake to final version (1.6), and added fjords map beta (being designed in bgg thread). <p/>' +
@@ -296,7 +397,7 @@ function renderPreScreen(px, py, standardButtonFun, randomButtonFun, beginnerBut
     ' -Choosing initial faction: pick it from the popup<br/>' +
     ' -Placing initial dwelling: click on a map hex of your color<br/>' +
     ' -Choosing an initial bonus tile: click on a bonus tile, they are the parchment (very light yellow) colored ones<br/>' +
-    ' -Leeching power from an opponent: click yes, no, "auto 1" to automatically do "yes" for 1, "auto smart" to never show the popup anymore (sometimes does lose VPs, depending on round)<br/>' +
+    ' -Leeching power from an opponent: choose Decline, Accept, or Always accept for the rest of this game.<br/>' +
     ' -Bonus digs at the end of the round from the cult track: click the map as many times as you have digs. If no reachable tile is available, click an invalid one to continue on, it will be ignored.<br/>' +
     '</p>' +
     '<h4>Halflings</h4>' +
@@ -416,7 +517,7 @@ function getLocalStorage() {
   preferences.gametypedropdown = localStorage['gametypedropdown'];
   preferences.playertypedropdown = localStorage['playertypedropdown'];
   preferences.worldmapdropdown = localStorage['worldmapdropdown'];
-  if(preferences.worldmapdropdown == undefined) preferences.worldmapdropdown = 4; //default to Fire&Ice World map
+  if(preferences.worldmapdropdown == undefined) preferences.worldmapdropdown = 4; //default to Fire & Ice Alternate Standard
   preferences.finalscoringdropdown = localStorage['finalscoringdropdown'];
   preferences.factiondropdown[0] = localStorage['factiondropdown0'];
   preferences.factiondropdown[1] = localStorage['factiondropdown1'];
@@ -440,4 +541,3 @@ function getLocalStorage() {
 
 window.onbeforeunload = setLocalStorage;
 getLocalStorage();
-
