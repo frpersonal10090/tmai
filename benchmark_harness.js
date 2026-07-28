@@ -157,10 +157,14 @@ function benchmarkBucket(table, key) {
   return table[key];
 }
 
-function benchmarkAddGameToReport(report, gameResult) {
+function benchmarkAddGameToReport(report, gameResult, onError, scenarioIndex, gameName) {
   report.rejectedActions += gameResult.rejected.length;
+  if(gameResult.rejected.length && onError) {
+    onError({type: 'rejected', scenario: scenarioIndex, game: gameName, rejected: gameResult.rejected});
+  }
   if(gameResult.crash) {
     report.crashes.push(gameResult.crash);
+    if(onError) onError({type: 'crash', scenario: scenarioIndex, game: gameName, error: gameResult.crash});
     return;
   }
   var l5 = null;
@@ -206,6 +210,8 @@ function runBenchmark(options) {
   options = options || {};
   var pairs = options.pairs == undefined ? 1 : options.pairs;
   var seed = options.seed == undefined ? 1 : options.seed;
+  var onProgress = options.onProgress;
+  var onError = options.onError;
   if(pairs < 1 || pairs != Math.floor(pairs)) throw new Error('pairs must be a positive integer');
   if(seed != Math.floor(seed)) throw new Error('seed must be an integer');
   var params = options.params || benchmarkDefaultParams();
@@ -241,12 +247,19 @@ function runBenchmark(options) {
       report.crashes.push(setupCrash);
       report.crashes.push(setupCrash);
       report.equivalence.failed.push({scenario: i, reason: 'setup crash', error: setupCrash});
+      if(onError) onError({type: 'setup crash', scenario: i, error: setupCrash});
+      if(onProgress) onProgress({
+        completedScenarios: i + 1,
+        processedGames: (i + 1) * 2,
+        report: report,
+        elapsedMs: new Date().getTime() - started
+      });
       continue;
     }
     var gameA = benchmarkRunGame(scenario.snapshot, [5, 6], scenario.setup.actionSeed);
+    benchmarkAddGameToReport(report, gameA, onError, i, 'A');
     var gameB = benchmarkRunGame(scenario.snapshot, [6, 5], scenario.setup.actionSeed);
-    benchmarkAddGameToReport(report, gameA);
-    benchmarkAddGameToReport(report, gameB);
+    benchmarkAddGameToReport(report, gameB, onError, i, 'B');
     var sameTrace = gameA.trace.join('\n') == gameB.trace.join('\n');
     var sameOutcome = benchmarkSameOutcome(gameA, gameB);
     if(!gameA.crash && !gameB.crash && sameTrace && sameOutcome) report.equivalence.passed++;
@@ -259,6 +272,13 @@ function runBenchmark(options) {
       gameBCrash: gameB.crash
     });
     report.scenariosDetail.push({scenario: i, setup: scenario.setup, gameA: gameA, gameB: gameB});
+    if(onProgress) onProgress({
+      completedScenarios: i + 1,
+      processedGames: (i + 1) * 2,
+      report: report,
+      elapsedMs: new Date().getTime() - started,
+      scenario: report.scenariosDetail[report.scenariosDetail.length - 1]
+    });
   }
 
   report.averageVpL5 = report.completedGames ? report.l5Vp / report.completedGames : 0;

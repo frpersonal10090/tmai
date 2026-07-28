@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Usage: node benchmark.js --pairs 100 --seed 12345 [--json]
+// Usage: node benchmark.js --pairs 100 --seed 12345 [--quiet] [--verbose] [--json]
 
 var fs = require('fs');
 var path = require('path');
@@ -63,15 +63,70 @@ function loadSources(context) {
 }
 
 function parseArgs(argv) {
-  var options = {pairs: 1, seed: 1, json: false};
+  var options = {pairs: 1, seed: 1, json: false, quiet: false, verbose: false};
   for(var i = 0; i < argv.length; i++) {
     if(argv[i] == '--pairs') options.pairs = Number(argv[++i]);
     else if(argv[i] == '--seed') options.seed = Number(argv[++i]);
     else if(argv[i] == '--json') options.json = true;
+    else if(argv[i] == '--quiet') options.quiet = true;
+    else if(argv[i] == '--verbose') options.verbose = true;
     else if(argv[i] == '--help') options.help = true;
     else throw new Error('unknown argument: ' + argv[i]);
   }
   return options;
+}
+
+function formatElapsed(milliseconds) {
+  if(milliseconds < 1000) return milliseconds + 'ms';
+  return (milliseconds / 1000).toFixed(1) + 's';
+}
+
+function formatProgress(progress) {
+  var report = progress.report;
+  var gamesPerSecond = progress.elapsedMs ? progress.processedGames / (progress.elapsedMs / 1000) : 0;
+  var averageDifference = report.completedGames ? report.vpDifference / report.completedGames : 0;
+  var percent = progress.completedScenarios * 100 / report.scenarios;
+  return 'Progress ' + progress.completedScenarios + '/' + report.scenarios +
+      ' (' + percent.toFixed(1) + '%) | games ' + progress.processedGames + '/' + report.games +
+      ' | elapsed ' + formatElapsed(progress.elapsedMs) +
+      ' | ' + gamesPerSecond.toFixed(2) + ' games/s' +
+      ' | L5 ' + report.l5Wins + ', L6 ' + report.l6Wins + ', ties ' + report.ties +
+      ' | avg VP difference (L6 - L5) ' + averageDifference.toFixed(2);
+}
+
+function formatScenarioDiagnostic(scenario) {
+  function gameScores(game) {
+    if(game.crash) return 'crashed';
+    var scores = [];
+    for(var i = 0; i < game.players.length; i++) scores.push('seat' + game.players[i].seat + ' L' + game.players[i].level + ' ' + game.players[i].vp);
+    return scores.join(', ');
+  }
+  return 'Scenario ' + (scenario.scenario + 1) + ': ' + scenario.setup.factions.join(' vs ') +
+      ' | A ' + gameScores(scenario.gameA) + ' | B ' + gameScores(scenario.gameB);
+}
+
+function createProgressReporter(options) {
+  var interval = Math.max(1, Math.ceil(options.pairs / 20));
+  return function(progress) {
+    if(!options.quiet && !options.json &&
+        (progress.completedScenarios == 1 || progress.completedScenarios == progress.report.scenarios ||
+         progress.completedScenarios % interval == 0)) {
+      console.error(formatProgress(progress));
+    }
+    if(options.verbose && !options.json && progress.scenario) console.error(formatScenarioDiagnostic(progress.scenario));
+  };
+}
+
+function createErrorReporter() {
+  return function(event) {
+    var prefix = 'Benchmark ' + event.type + ' in scenario ' + (event.scenario + 1) +
+        (event.game ? ', game ' + event.game : '') + ': ';
+    if(event.type == 'rejected') {
+      console.error(prefix + event.rejected.length + ' rejected/illegal AI action(s): ' + event.rejected[0].error);
+    } else {
+      console.error(prefix + event.error);
+    }
+  };
 }
 
 function formatBuckets(title, buckets) {
@@ -112,12 +167,17 @@ function formatReport(report) {
 function main() {
   var options = parseArgs(process.argv.slice(2));
   if(options.help) {
-    console.log('Usage: node benchmark.js --pairs <positive integer> --seed <integer> [--json]');
+    console.log('Usage: node benchmark.js --pairs <positive integer> --seed <integer> [--quiet] [--verbose] [--json]');
     return;
   }
   var context = createBenchmarkContext();
   loadSources(context);
-  var report = context.runBenchmark({pairs: options.pairs, seed: options.seed});
+  var report = context.runBenchmark({
+    pairs: options.pairs,
+    seed: options.seed,
+    onProgress: createProgressReporter(options),
+    onError: createErrorReporter()
+  });
   console.log(options.json ? JSON.stringify(report, null, 2) : formatReport(report));
   if(report.crashes.length || report.equivalence.failed.length) process.exitCode = 1;
 }

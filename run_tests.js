@@ -104,6 +104,9 @@ var benchmarkResult = childProcess.spawnSync(process.execPath,
 var benchmarkReplayResult = childProcess.spawnSync(process.execPath,
     [path.join(__dirname, 'benchmark.js'), '--pairs', '1', '--seed', '12345', '--json'],
     {encoding: 'utf8'});
+var benchmarkProgressResult = childProcess.spawnSync(process.execPath,
+    [path.join(__dirname, 'benchmark.js'), '--pairs', '1', '--seed', '12345'],
+    {encoding: 'utf8'});
 var benchmarkReport;
 var benchmarkReplayReport;
 try {
@@ -121,9 +124,11 @@ if(benchmarkReport && benchmarkReplayReport) {
   };
   var benchmarkSmokePassed = benchmarkResult.status === 0 &&
       benchmarkReplayResult.status === 0 &&
+      benchmarkProgressResult.status === 0 && benchmarkResult.stderr === '' &&
       benchmarkReport.scenarios === 1 && benchmarkReport.games === 2 &&
       benchmarkReport.completedGames === 2 && benchmarkReport.crashes.length === 0 &&
       benchmarkReport.equivalence.passed === 1 &&
+      /Progress 1\/1 \(100\.0%\) \| games 2\/2/.test(benchmarkProgressResult.stderr) &&
       stableScenarioDetail(benchmarkReport) == stableScenarioDetail(benchmarkReplayReport);
   console.log('Benchmark smoke test: ' + (benchmarkSmokePassed ? 'passed' : 'failed'));
   if(!benchmarkSmokePassed) process.exitCode = 1;
