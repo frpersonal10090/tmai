@@ -1193,13 +1193,87 @@ function testSaveRestoreRoundTripForSimulationState() {
   expectEqual(0, colorToPlayerMap[player.color]);
 }
 
-function testSavedStateRemainsReusableAfterLoad() {
-  createAILouCharacterizationFixture(5);
+function testSavedSnapshotRemainsIndependentAndReusable() {
+  var player = createAILouCharacterizationFixture(5);
+  state.type = S_ACTION;
   state.round = 3;
+  state.typestack = [S_ACTION];
+  state.leecharray = [[0, 2]];
+  setWorld(1, 1, R);
+  setBuilding(1, 1, B_D, player.woodcolor);
+  game.bridges[0][0] = player.woodcolor;
+  game.octogons[A_POWER_1P] = 1;
+  player.c = 19;
+  player.vp = 37;
   var saved = saveGameState(game, state, undefined);
-  loadGameState(saved);
+
   state.round = 6;
+  state.typestack = [];
+  state.leecharray = [];
+  setWorld(1, 1, G);
+  setBuilding(1, 1, B_NONE, N);
+  game.bridges[0][0] = N;
+  game.octogons = {};
+  player.c = 0;
+  player.vp = 0;
+  player.actor.ail = 6;
+
   expectEqual(3, saved.state.round);
+  expectEqual(1, saved.state.typestack.length);
+  expectEqual(1, saved.state.leecharray.length);
+  expectEqual(R, saved.world[arCo(1, 1)]);
+  expectEqual(B_D, saved.buildings[arCo(1, 1)][0]);
+  expectEqual(19, saved.players[0].c);
+  expectEqual(37, saved.players[0].vp);
+  expectEqual(5, saved.players[0].actor.ail);
+
+  loadGameState(saved);
+  player = game.players[0];
+
+  expectEqual(3, state.round);
+  expectEqual(1, state.typestack.length);
+  expectEqual(1, state.leecharray.length);
+  expectEqual(R, getWorld(1, 1));
+  expectEqual(B_D, getBuilding(1, 1)[0]);
+  expectEqual(player.woodcolor, game.bridges[0][0]);
+  expectEqual(1, game.octogons[A_POWER_1P]);
+  expectEqual(19, player.c);
+  expectEqual(37, player.vp);
+  expectEqual(5, player.actor.ail);
+
+  state.round = 6;
+  state.typestack = [];
+  state.leecharray = [];
+  setWorld(1, 1, G);
+  setBuilding(1, 1, B_NONE, N);
+  game.bridges[0][0] = N;
+  game.octogons = {};
+  player.c = 0;
+  player.vp = 0;
+  player.actor.ail = 6;
+
+  expectEqual(3, saved.state.round);
+  expectEqual(1, saved.state.typestack.length);
+  expectEqual(1, saved.state.leecharray.length);
+  expectEqual(R, saved.world[arCo(1, 1)]);
+  expectEqual(B_D, saved.buildings[arCo(1, 1)][0]);
+  expectEqual(19, saved.players[0].c);
+  expectEqual(37, saved.players[0].vp);
+  expectEqual(5, saved.players[0].actor.ail);
+
+  loadGameState(saved);
+  player = game.players[0];
+
+  expectEqual(3, state.round);
+  expectEqual(1, state.typestack.length);
+  expectEqual(1, state.leecharray.length);
+  expectEqual(R, getWorld(1, 1));
+  expectEqual(B_D, getBuilding(1, 1)[0]);
+  expectEqual(player.woodcolor, game.bridges[0][0]);
+  expectEqual(1, game.octogons[A_POWER_1P]);
+  expectEqual(19, player.c);
+  expectEqual(37, player.vp);
+  expectEqual(5, player.actor.ail);
 }
 
 function runAILouInfrastructureCharacterizationTests() {
@@ -1210,7 +1284,7 @@ function runAILouInfrastructureCharacterizationTests() {
   results.push(runCharacterizationTest('AILou(5) level survives a real tryActions snapshot path', testAILouLevelSurvivesTryActionsSnapshot));
   results.push(runCharacterizationTest('AILou sequential construction keeps instance levels independent', testAILouSequentialConstructionKeepsLevelsIndependent));
   results.push(runCharacterizationTest('save/load round-trips simulation-relevant game and state fields', testSaveRestoreRoundTripForSimulationState));
-  results.push(runCharacterizationTest('saved state remains reusable after load', testSavedStateRemainsReusableAfterLoad));
+  results.push(runCharacterizationTest('saved snapshots remain independent and reusable after repeated loads', testSavedSnapshotRemainsIndependentAndReusable));
 
   var passed = 0;
   for(var i = 0; i < results.length; i++) if(results[i]) passed++;

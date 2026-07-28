@@ -36,7 +36,7 @@ function saveGameState(game, state, logText) {
 // Loads the gamestate from the given saveGameState result, puts it in the various global variables and recalculates some global variables
 function loadGameState(fromgame) {
   game = clone(fromgame);
-  state = fromgame.state;
+  state = game.state;
   if(fromgame.logText) {
     logText = fromgame.logText;
     logEl.innerHTML = logText;
@@ -985,4 +985,3 @@ function deSerializeGameStateLegacyFormat(text) {
 
   return deSerializeGameStateNewFormat(result);
 }
-
