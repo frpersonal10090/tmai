@@ -68,8 +68,6 @@ var HS_TOWN_TILE = 7;
 var HS_PRIEST_COLOR = 8;
 var HS_OTHER = 9; //custom dialog, ...
 
-var last_helptext = ''; // used to provide more helpful text in the action area as well when having to click on map, otherwise it's kind of confusing
-
 var humanstate = HS_MAIN;
 
 var undoGameStates = []; //remember game state from last action
@@ -91,7 +89,6 @@ function setHumanState(hstate, helptext, fun) {
   humanstate = hstate;
   if(helptext) {
     setHelp(helptext);
-    last_helptext = helptext;
   }
   if(hstate == HS_MAP || hstate == HS_DIG) mapClickFun = fun;
   else if(hstate == HS_BONUS_TILE || hstate == HS_FAVOR_TILE || hstate == HS_TOWN_TILE) tileClickFun = fun;
@@ -294,9 +291,11 @@ function letClickMapForBridge(num) {
 // Compact reusable decision panel for choices which used to be a list of text
 // links. It stays in the action side of the board so the map remains visible.
 function makeChoicePopup(title, subtitle, width, height) {
+  resetGameplayPopupPosition();
   popupElement.innerHTML = '';
-  var panelX = 558;
-  var panelY = 565;
+  var dock = getGameplayPopupDock(width, height);
+  var panelX = dock.x;
+  var panelY = dock.y;
   var panel = makeSizedDiv(panelX, panelY, width, height, popupElement);
   panel.style.boxSizing = 'border-box';
   panel.style.padding = '11px';
@@ -318,6 +317,7 @@ function makeChoicePopup(title, subtitle, width, height) {
     hint.style.fontSize = '10px';
     hint.style.zIndex = 2002;
   }
+  makeGameplayPopupDragHandle(panelX, panelY, width);
   return {panel: panel, x: panelX, y: panelY, width: width, height: height};
 }
 
@@ -383,7 +383,7 @@ var executeButtonFun_ = null;
 
 // Presentation-only placement for the faction chooser. It deliberately does
 // not enter the game state or save data.
-var factionChooserPosition = {x: 10, y: 8};
+var factionChooserPosition = {x: GAMEPLAY_POPUP_DOCK_X, y: GAMEPLAY_POPUP_DOCK_Y};
 
 var executeButtonFun = function() {
   if(executeButtonFun_) executeButtonFun_();
@@ -497,18 +497,16 @@ Human.prototype.chooseFaction = function(playerIndex, callback) {
     if(grouped[color]) colors.push(color);
   }
 
-  // This is deliberately a narrow sidecar rather than a full-screen modal:
-  // faction choice is a setup decision, so the board and all tile supplies
-  // remain visible while the player compares the options.
+  // Use the same decision dock as every other gameplay choice.
+  resetGameplayPopupPosition();
   popupElement.innerHTML = '';
-  // The previous AI/setup step may have focused a lower control. Return to
-  // the board's top so this document-positioned sidecar is never split above
-  // the viewport on a tablet.
-  if(window.scrollY != 0) window.scrollTo(0, 0);
-  var panelX = factionChooserPosition.x;
-  var panelY = factionChooserPosition.y;
   var panelW = 300;
   var panelH = 38 + colors.length * 34;
+  var factionDock = getGameplayPopupDock(panelW, panelH);
+  factionChooserPosition.x = factionDock.x;
+  factionChooserPosition.y = factionDock.y;
+  var panelX = factionChooserPosition.x;
+  var panelY = factionChooserPosition.y;
   var chooserLayer = makeSizedDiv(panelX, panelY, panelW, panelH, popupElement);
   chooserLayer.style.zIndex = 2001;
   var panel = makeSizedDiv(0, 0, panelW, panelH, chooserLayer);
@@ -541,6 +539,7 @@ Human.prototype.chooseFaction = function(playerIndex, callback) {
   dragHandle.style.touchAction = 'none';
   dragHandle.style.userSelect = 'none';
   dragHandle.style.zIndex = 2003;
+  dragHandle.style.display = 'none';
   dragHandle.innerHTML = '⠿ MOVE';
   dragHandle.title = 'Drag to place the faction chooser anywhere on screen.';
   dragHandle.onpointerdown = function(event) {
@@ -568,6 +567,8 @@ Human.prototype.chooseFaction = function(playerIndex, callback) {
     document.addEventListener('pointercancel', end);
     event.preventDefault();
   };
+
+  makeGameplayPopupDragHandle(panelX, panelY, panelW);
 
   for(var g = 0; g < colors.length; g++) {
     var groupColor = colors[g];
@@ -703,13 +704,13 @@ Human.prototype.leechPower = function(playerIndex, fromPlayer, amount, vpcost, r
     return;
   }
 
+  resetGameplayPopupPosition();
   popupElement.innerHTML = '';
-  // The map is needed to evaluate leeching. Put this decision dock directly
-  // below it instead of obscuring the board with a page-wide overlay.
-  var panelX = 495;
-  var panelY = 500;
   var panelW = 590;
   var panelH = 225;
+  var leechDock = getGameplayPopupDock(panelW, panelH);
+  var panelX = leechDock.x;
+  var panelY = leechDock.y;
   var panel = makeSizedDiv(panelX, panelY, panelW, panelH, popupElement);
   panel.style.boxSizing = 'border-box';
   panel.style.padding = '20px';
@@ -718,6 +719,7 @@ Human.prototype.leechPower = function(playerIndex, fromPlayer, amount, vpcost, r
   panel.style.borderRadius = '18px';
   panel.style.boxShadow = '0 5px 12px rgba(30, 18, 9, 0.32), inset 0 0 0 2px rgba(255,255,255,0.5)';
   panel.style.zIndex = 2001;
+  makeGameplayPopupDragHandle(panelX, panelY, panelW);
 
   var heading = makeText(panelX + 24, panelY + 18, 'Power leech', popupElement);
   heading.style.color = '#432a18';
@@ -1062,7 +1064,32 @@ function getUpgradeChoicesForBuilding(player, building) {
   return choices;
 }
 
+// The board shortcut should offer only upgrades the player can actually pay
+// for right now. The full Upgrade action still lists buildable destinations so
+// a player can inspect costs while planning a later turn.
+function getAffordableUpgradeChoicesForBuilding(player, x, y, building) {
+  var choices = getUpgradeChoicesForBuilding(player, building);
+  var affordable = [];
+  for(var i = 0; i < choices.length; i++) {
+    var choice = choices[i];
+    var output = getUpgradeActionOutputBuilding({type: choice.type});
+    var adjacent = choice.type == A_UPGRADE_TP && hasNeighbor(x, y, player.woodcolor);
+    var cost = player.getFaction().getBuildingCost(output, adjacent);
+    if(canConsume(player, cost)) affordable.push(choice);
+  }
+  return affordable;
+}
+
+function showAffordableUpgradeChoicePopup(player, x, y) {
+  var building = getBuildingForUpgradeClick(x, y);
+  var choices = getAffordableUpgradeChoicesForBuilding(player, x, y, building);
+  if(choices.length == 0) return false;
+  showUpgradeChoicePopup([x, y], building, choices);
+  return true;
+}
+
 function showUpgradeChoicePopup(co, building, choices) {
+  resetGameplayPopupPosition();
   popupElement.innerHTML = '';
   var backdrop = makeSizedDiv(0, 0, 1085, 900, popupElement);
   backdrop.style.background = 'rgba(34, 25, 18, .08)';
@@ -1072,9 +1099,11 @@ function showUpgradeChoicePopup(co, building, choices) {
     setHelp('Upgrade selection cancelled.');
   };
 
-  var panelX = 558;
-  var panelY = 565;
   var panelW = 522;
+  var panelH = 102;
+  var upgradeDock = getGameplayPopupDock(panelW, panelH);
+  var panelX = upgradeDock.x;
+  var panelY = upgradeDock.y;
   var panel = makeSizedDiv(panelX, panelY, panelW, 102, popupElement);
   panel.style.boxSizing = 'border-box';
   panel.style.background = 'linear-gradient(145deg, #fff5d8, #e3c185)';
@@ -1082,6 +1111,7 @@ function showUpgradeChoicePopup(co, building, choices) {
   panel.style.borderRadius = '10px';
   panel.style.boxShadow = '0 5px 12px rgba(40,25,12,.34), inset 0 0 0 1px rgba(255,255,255,.6)';
   panel.style.zIndex = 2001;
+  makeGameplayPopupDragHandle(panelX, panelY, 420);
 
   var names = {};
   names[B_TP] = 'Trading Post';

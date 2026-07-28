@@ -7,8 +7,7 @@ git switch level6
 git status
 node run_tests.js
 git add -A
-git diff --cached --check
-git commit -m "Describe your changes"
+git commit -m "UI upgrade"
 git push origin level6
 
 # Publish the tested version to master / GitHub Pages
