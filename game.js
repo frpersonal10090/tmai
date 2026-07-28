@@ -100,7 +100,7 @@ var newAI = function() {
   if(state.aiAlgorithm == 3) return new AILou(3);
   if(state.aiAlgorithm == 4) return new AIRandom();
   if(state.aiAlgorithm == 5) return new AILou(5);
-  if(state.aiAlgorithm == 6) return new AILou(6);
+  if(state.aiAlgorithm == 6) return new AILevel6();
   throw 'unknown AI type';
 };
 

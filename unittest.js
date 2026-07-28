@@ -1096,6 +1096,89 @@ function testAILouSequentialConstructionKeepsLevelsIndependent() {
   expectEqual(6, level6.ail);
 }
 
+function testAILevel5FactoryCreatesAILou() {
+  state = new State();
+  state.aiAlgorithm = 5;
+  var actor = newAI();
+  expect(actor.constructor == AILou, 'AI Level 5 factory should create AILou');
+  expectEqual(5, actor.ail);
+}
+
+function testAILevel6FactoryCreatesAILevel6() {
+  state = new State();
+  state.aiAlgorithm = 6;
+  var actor = newAI();
+  expect(actor.constructor == AILevel6, 'AI Level 6 factory should create AILevel6');
+  expectEqual(5, actor.ail);
+}
+
+function createAILevel6CharacterizationFixture() {
+  var player = createAILouCharacterizationFixture(5);
+  state.aiAlgorithm = 6;
+  player.actor = new AILevel6();
+  return player;
+}
+
+function testAILevel6SurvivesClone() {
+  var player = createAILevel6CharacterizationFixture();
+  var clonedActor = clone(player.actor);
+  expect(clonedActor.constructor == AILevel6, 'cloning should preserve AILevel6');
+  expectEqual(5, clonedActor.ail);
+}
+
+function testAILevel6SurvivesSaveGameStateAndLoadGameState() {
+  var player = createAILevel6CharacterizationFixture();
+  var saved = saveGameState(game, state, undefined);
+  expect(saved.players[0].actor.constructor == AILevel6, 'saving should preserve AILevel6');
+  expectEqual(5, saved.players[0].actor.ail);
+  loadGameState(saved);
+  expect(game.players[0].actor.constructor == AILevel6, 'loading should preserve AILevel6');
+  expectEqual(5, game.players[0].actor.ail);
+}
+
+function testAILevel6SurvivesSerializedSaveAndLoad() {
+  createAILevel6CharacterizationFixture();
+  var serialized = serializeGameState(saveGameState(game, state, undefined));
+  var loaded = deSerializeGameState(serialized);
+  expect(loaded != null, 'serialized AILevel6 game should load');
+  expectEqual(6, loaded.state.aiAlgorithm);
+  expect(loaded.players[0].actor.constructor == AILevel6, 'serialized load should preserve AILevel6');
+  expectEqual(5, loaded.players[0].actor.ail);
+}
+
+function getSelectedActionString(actor) {
+  var selected;
+  actor.doAction(0, function(playerIndex, actions) {
+    selected = actionsToString(actions);
+    return '';
+  });
+  expect(selected != undefined, 'AI should select an action');
+  return selected;
+}
+
+function testAILevel6MatchesLevel5SelectedActions() {
+  var player = createAILouCharacterizationFixture(5);
+  var oldRandom = Math.random;
+  Math.random = function() { return 0; };
+  try {
+    state.round = 1;
+    player.actor = new AILou(5);
+    var level5OpeningAction = getSelectedActionString(player.actor);
+    player.actor = new AILevel6();
+    var level6OpeningAction = getSelectedActionString(player.actor);
+    expectEqual(level5OpeningAction, level6OpeningAction);
+
+    state.round = 6;
+    player.actor = new AILou(5);
+    var level5EndgameAction = getSelectedActionString(player.actor);
+    player.actor = new AILevel6();
+    var level6EndgameAction = getSelectedActionString(player.actor);
+    expectEqual(level5EndgameAction, level6EndgameAction);
+  } finally {
+    Math.random = oldRandom;
+  }
+}
+
 function testSaveRestoreRoundTripForSimulationState() {
   var player = createAILouCharacterizationFixture(5);
 
@@ -1283,6 +1366,12 @@ function runAILouInfrastructureCharacterizationTests() {
   results.push(runCharacterizationTest('AILou(5) level survives loadGameState()', testAILouLevelSurvivesLoadGameState));
   results.push(runCharacterizationTest('AILou(5) level survives a real tryActions snapshot path', testAILouLevelSurvivesTryActionsSnapshot));
   results.push(runCharacterizationTest('AILou sequential construction keeps instance levels independent', testAILouSequentialConstructionKeepsLevelsIndependent));
+  results.push(runCharacterizationTest('AI Level 5 factory creates AILou(5)', testAILevel5FactoryCreatesAILou));
+  results.push(runCharacterizationTest('AI Level 6 factory creates AILevel6', testAILevel6FactoryCreatesAILevel6));
+  results.push(runCharacterizationTest('AILevel6 level and class survive clone()', testAILevel6SurvivesClone));
+  results.push(runCharacterizationTest('AILevel6 level and class survive save/load snapshots', testAILevel6SurvivesSaveGameStateAndLoadGameState));
+  results.push(runCharacterizationTest('AILevel6 level and class survive serialized save/load', testAILevel6SurvivesSerializedSaveAndLoad));
+  results.push(runCharacterizationTest('AILevel6 matches Level 5 selected actions in deterministic states', testAILevel6MatchesLevel5SelectedActions));
   results.push(runCharacterizationTest('save/load round-trips simulation-relevant game and state fields', testSaveRestoreRoundTripForSimulationState));
   results.push(runCharacterizationTest('saved snapshots remain independent and reusable after repeated loads', testSavedSnapshotRemainsIndependentAndReusable));
 

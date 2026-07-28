@@ -71,6 +71,7 @@ var files = [
   'actor.js',
   'ai_lode.js',
   'ai_lou.js',
+  'ai_level6.js',
   'ai_random.js',
   'human.js',
   'state.js',

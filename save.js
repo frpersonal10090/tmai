@@ -195,6 +195,8 @@ function serializeGameState(fromgame) {
   if(state.fireice) { if(comma) result += ','; result += 'fireice'; comma = true; }
   if(state.fireiceerrata) { if(comma) result += ','; result += 'fireiceerrata'; comma = true; }
   if(state.roundtilepromo2015) { if(comma) result += ','; result += 'roundtilepromo2015'; comma = true; }
+  if(comma) result += ',';
+  result += 'aiAlgorithm=' + fromgame.state.aiAlgorithm;
   result += '\n';
 
   result += '\nrules:\n';
@@ -551,6 +553,13 @@ function deSerializeGameStateNewFormat(text) {
     result.state.fireice = stringContains(s, 'fireice');
     result.state.fireiceerrata = stringContains(s, 'fireiceerrata');
     result.state.roundtilepromo2015 = stringContains(s, 'roundtilepromo2015');
+    var optionValues = getCommas(s);
+    for(var i = 0; i < optionValues.length; i++) {
+      var option = decomposeEqualsLine(optionValues[i]);
+      if(option[0] == 'aiAlgorithm' && option.length == 2) {
+        result.state.aiAlgorithm = parseInt(option[1]);
+      }
+    }
   }
 
   s = parseLabelPart(text, 'rules:');
