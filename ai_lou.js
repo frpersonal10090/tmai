@@ -29,7 +29,7 @@ freely, subject to the following restrictions:
 var AILou = function(level) {
   this.scoreActionValues = {};
   this.restrictions = clone(defaultRestrictions);
-  AILou.ail = level; //processing level (TODO: danger: global variable instead of class field. making TMAI support players with different AIs would not be supported because of this! use this.ail here and make functions prototype to fix this)
+  this.ail = level;
 };
 inherit(AILou, Actor);
 
@@ -434,8 +434,8 @@ AILou.prototype.updateScoreActionValues_ = function(player, roundnum) {
   //The AIs are not building sanctuaries.... let's add some score
   //LOU SA seem to be built prematurely, only add score in round 4 or greater.
   if(roundnum > 3) s.b_sa += sanctuarytwiddle;
-  if(AILou.ail < 2 && game.finalscoring == 2 && roundnum < 5) s.b_sa = 0;
-  if(AILou.ail >= 2 && game.finalscoring == 2 && roundnum < 6) s.b_sa = 0;
+  if(this.ail < 2 && game.finalscoring == 2 && roundnum < 5) s.b_sa = 0;
+  if(this.ail >= 2 && game.finalscoring == 2 && roundnum < 6) s.b_sa = 0;
   //LOU for settlements, shipping is better for expansion
   if(game.finalscoring == 4) s.shipping += 1;
 
@@ -586,7 +586,7 @@ AILou.prototype.updateScoreActionValues_ = function(player, roundnum) {
     //only build SH if can convert 3w to 3p and must not burn too much manna (coin from 4 to 6)
     if(roundnum < 6) s.b_te += 5;  //get more priests for digging
     //SA here produces two priests, so is good before round 6
-    if(AILou.ail > 1 && (roundnum == 4 || roundnum == 5)) {
+    if(this.ail > 1 && (roundnum == 4 || roundnum == 5)) {
       s.b_sa += 3;
       if(built_te(player) > 0) s.b_te -= 2;
     }
@@ -625,7 +625,7 @@ AILou.prototype.updateScoreActionValues_ = function(player, roundnum) {
     }
     if(roundnum > 2) makeTemple(1,0,0,0,0);
     //SA here produces two priests, so is good before round 6
-    if(AILou.ail > 1 && (roundnum == 4 || roundnum == 5)) {
+    if(this.ail > 1 && (roundnum == 4 || roundnum == 5)) {
       s.b_sa += 3;
       if(built_te(player) > 0) s.b_te -= 2;
     }
@@ -1003,7 +1003,7 @@ Rating	Name	        Games
 };
 
 AILou.prototype.scoreActionAI_ = function(player, actions, roundnum) {
-  return AILou.scoreAction(player, actions, this.scoreActionValues, roundnum);
+  return AILou.scoreAction(player, actions, this.scoreActionValues, roundnum, this.ail);
 };
 
 //bonus tiles chosen from world
@@ -1569,7 +1569,7 @@ AILou.prototype.chooseInitialFavorTile = function(playerIndex, callback) {
   for(var i = 0; i < tiles.length; i++) tilemap[tiles[i]] = true;
 
   var tile;
-  if(AILou.ail > 1) {
+  if(this.ail > 1) {
     if(tilemap[T_FAV_1E_DVP] && game.bonustiles[T_BON_SPADE_2C]) tile = T_FAV_1E_DVP;
     else if(tilemap[T_FAV_2E_1PW1W]) tile = T_FAV_2E_1PW1W;
   }
@@ -1729,7 +1729,7 @@ AILou.prototype.chooseAuxColor = function(playerIndex, callback) {
         if(START_LOCATIONS[ly][0] == state.worldMap && (START_LOCATIONS[ly][1]-1) == player.faction
           && START_LOCATIONS[ly][9] == color) {
           score += START_LOCATIONS[ly][2];
-          if(AILou.ail >= 5)  {
+          if(this.ail >= 5)  {
             var already = getAlreadyChosenColors();
             if(already[START_LOCATIONS[ly][6]])  score += -4;
             if(already[START_LOCATIONS[ly][7]])  score += START_LOCATIONS[ly][8];
@@ -2075,14 +2075,14 @@ AILou.prototype.chooseFaction = function(playerIndex, callback) {
 
   //The scores will be used as probability distribution function for random race choice.
   //But to bring the focus to the good races, subtract the lowest score from each.
-  if(AILou.ail <= 1) {
+  if(this.ail <= 1) {
     var lowest = 9999;
     for(var i = 0; i < scores.length; i++) lowest = Math.min(lowest, scores[i]);
     for(var i = 0; i < scores.length; i++) scores[i] -= lowest;
   }
 
  var faction = factions[AILou.pickWithBestScore(factions, scores, true)];  //factions with good score
- if(AILou.ail >= 3) faction = factions[AILou.pickWithBestScore(factions, scores, false)];  //only best factions
+ if(this.ail >= 3) faction = factions[AILou.pickWithBestScore(factions, scores, false)];  //only best factions
 
   var error = callback(playerIndex, faction);
   if(error != '') {
@@ -2132,7 +2132,7 @@ var START_FACTIONS = [
 //already = object that has true value for each already chosen color
 AILou.prototype.scoreFaction_ = function(player, already, faction) {
   //LOU add revised processing
-  if(AILou.ail >= 3) AILou.info = false;  //change to true to get more info for level3+
+  if(this.ail >= 3) AILou.info = false;  //change to true to get more info for level3+
   else AILou.info = false;
   var score = 0;
   var  color = factionColor(faction);
@@ -2159,7 +2159,7 @@ AILou.prototype.scoreFaction_ = function(player, already, faction) {
   //var X = 11; any (shapeshifters)
   //var Z = 12; many (riverwalkers) 
 
-  if(AILou.ail >= 5) {
+  if(this.ail >= 5) {
     if(AILou.info) addLog('ENEMY START'+color+' faction: '+faction.index+1);
     var enemycolor = 0;
     var enemyvalue = -9;
@@ -2207,7 +2207,7 @@ AILou.prototype.scoreFaction_ = function(player, already, faction) {
   delta = START_FACTIONS[xfaction] [13];
   if (delta != 0 && state.worldMap == 5) result += delta;
 
-  if(AILou.ail <= 1) score += (result - 10) / 20;
+  if(this.ail <= 1) score += (result - 10) / 20;
   else score += (result - 20);
 
   if(AILou.info) addLog('WINP: AI score win_' +(xfaction+1)+ ': ' + result + '   score: ' + score);
@@ -2461,7 +2461,7 @@ for so much. Shipping VP worth can, for example, be calculated from how many eas
 that location, and so on.
 Values should also include round and faction VP bonuses, so the AI can choose how valuable it finds those (e.g. in a round where TP gives 3VP, add 3 to b_tp in values). TODO: don't require this, auto add round and faction bonuses etc... and allow specifying their worth
 */
-AILou.scoreAction = function(player, actions, values, roundnum) {
+AILou.scoreAction = function(player, actions, values, roundnum, ail) {
   //The round number in the list was always zero is replaced.
   //keep all round and bonus tile scoring into account. They count as VP.
   //res order is: 0-coin, 1-worker, 2-priest, 3-power bowl 2, 4-victory points (c,w,p,pw2,vp)
@@ -2574,7 +2574,7 @@ AILou.scoreAction = function(player, actions, values, roundnum) {
       //TODO: use Sandstorm to connect
       var countColor = AILou.getColorTilesAdjacent(player, action.co[0], action.co[1]);
       //increase value of adding D next to other D, towards town must have town value of 3
-      if(AILou.ail > 1) {
+      if(ail > 1) {
         if(existingtown == 0 && towardstown == 0) {
         newtown += countColor[2]*2;
         }
@@ -2582,7 +2582,7 @@ AILou.scoreAction = function(player, actions, values, roundnum) {
       }
       values.networkcon++;
       //examine VP gain at end
-      if(AILou.ail > 1  && roundnum == 6) {
+      if(ail > 1  && roundnum == 6) {
         scoreProjection = projectEndGameScores();
         scoreNow = scoreProjection[player.index];
         setBuilding(action.co[0], action.co[1], B_D, player.woodcolor);
@@ -2691,7 +2691,7 @@ AILou.scoreAction = function(player, actions, values, roundnum) {
       player.shipping = xshipping;
 
       //LOU for AI Level > 1, examine VP gain at end
-      if(AILou.ail > 1  && roundnum == 6) {
+      if(ail > 1  && roundnum == 6) {
         scoreProjection = projectEndGameScores();
         scoreNow = scoreProjection[player.index];
         setBuilding(action.co[0], action.co[1], B_D, player.woodcolor);
@@ -2791,7 +2791,7 @@ AILou.scoreAction = function(player, actions, values, roundnum) {
       b_te++;
 
       //add IceMaidens SH bonus for one temple
-      if(AILou.ail > 1 && player.faction == F_ICEMAIDENS) res[4] += 3*built_sh(player)*(7-roundnum);
+      if(ail > 1 && player.faction == F_ICEMAIDENS) res[4] += 3*built_sh(player)*(7-roundnum);
 
       //no size increase so no "touchesExistingTown" test here
       // avoid isolated TP for upgrade TE
@@ -2825,7 +2825,7 @@ AILou.scoreAction = function(player, actions, values, roundnum) {
       if(player.faction == F_MERMAIDS) shipping++;
 
       //add IceMaidens SH bonus for built temples
-      if(AILou.ail > 1 && player.faction == F_ICEMAIDENS) res[4] += 3*built_te(player)*(7-roundnum);
+      if(ail > 1 && player.faction == F_ICEMAIDENS) res[4] += 3*built_te(player)*(7-roundnum);
 
       if(touchesExistingTownWood(action.co[0], action.co[1], player.woodcolor)) existingtown++;
       //if(goesTowardsNewTown(action.co[0], action.co[1], player)) towardstown++;
@@ -2859,7 +2859,7 @@ AILou.scoreAction = function(player, actions, values, roundnum) {
       //see if there is enough resources leftover after SA to build a TE first
       if(game.finalscoring == 2 && roundnum ==6 && built_sh(player)) {
         var rest = res;
-        if(AILou.ail > 1 ) subtractIncome(rest, player.getFaction().getBuildingCost(B_TE, false));
+        if(ail > 1 ) subtractIncome(rest, player.getFaction().getBuildingCost(B_TE, false));
         if((player.c+player.pw2 + rest[0]) >= 0 && (player.w + player.p + rest[1]) >= 0) {
           if(AILou.info) {
             addLog('TEMPLE_BUILD: '+logPlayerNameFun(player)+' location: '+letters[action.co[1]]+numbers[action.co[0]]
@@ -2869,7 +2869,7 @@ AILou.scoreAction = function(player, actions, values, roundnum) {
         }
       }
       //subtract IceMaidens SH bonus for one temple
-      if(AILou.ail > 1 && player.faction == F_ICEMAIDENS) res[4] -= 3*built_sh(player)*(7-roundnum);
+      if(ail > 1 && player.faction == F_ICEMAIDENS) res[4] -= 3*built_sh(player)*(7-roundnum);
 
       if(touchesExistingTownWood(action.co[0], action.co[1], player.woodcolor)) existingtown++;
       //if(goesTowardsNewTown(action.co[0], action.co[1], player)) towardstown++;

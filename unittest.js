@@ -1061,39 +1061,39 @@ function createAILouCharacterizationFixture(level) {
 
 function testAILouLevelSurvivesClone() {
   var player = createAILouCharacterizationFixture(5);
-  expectEqual(5, AILou.ail);
-  clone(player.actor);
-  expectEqual(5, AILou.ail);
+  var clonedActor = clone(player.actor);
+  expectEqual(5, player.actor.ail);
+  expectEqual(5, clonedActor.ail);
 }
 
 function testAILouLevelSurvivesSaveGameState() {
-  createAILouCharacterizationFixture(5);
-  expectEqual(5, AILou.ail);
-  saveGameState(game, state, undefined);
-  expectEqual(5, AILou.ail);
+  var player = createAILouCharacterizationFixture(5);
+  var saved = saveGameState(game, state, undefined);
+  expectEqual(5, player.actor.ail);
+  expectEqual(5, saved.players[0].actor.ail);
 }
 
 function testAILouLevelSurvivesLoadGameState() {
-  createAILouCharacterizationFixture(5);
-  var saved = saveGameState(game, state, undefined);
-  new AILou(5); // Isolate loadGameState from saveGameState's clone behavior.
-  expectEqual(5, AILou.ail);
-  loadGameState(saved);
-  expectEqual(5, AILou.ail);
-}
-
-function testAILouLevelSurvivesTryActionsRollbackSnapshot() {
   var player = createAILouCharacterizationFixture(5);
-  var error = tryActions(player, []);
-  expect(error != '', 'empty action sequence must be rejected');
-  expectEqual(5, AILou.ail);
+  var saved = saveGameState(game, state, undefined);
+  expectEqual(5, player.actor.ail);
+  loadGameState(saved);
+  expectEqual(5, game.players[0].actor.ail);
 }
 
-function testAILouSequentialConstructionLastLevelWins() {
-  new AILou(5);
-  expectEqual(5, AILou.ail);
-  new AILou(6);
-  expectEqual(6, AILou.ail);
+function testAILouLevelSurvivesTryActionsSnapshot() {
+  var player = createAILouCharacterizationFixture(5);
+  state.round = 6;
+  var error = tryActions(player, [new Action(A_PASS)]);
+  expectEqual('', error);
+  expectEqual(5, game.players[0].actor.ail);
+}
+
+function testAILouSequentialConstructionKeepsLevelsIndependent() {
+  var level5 = new AILou(5);
+  var level6 = new AILou(6);
+  expectEqual(5, level5.ail);
+  expectEqual(6, level6.ail);
 }
 
 function testSaveRestoreRoundTripForSimulationState() {
@@ -1207,8 +1207,8 @@ function runAILouInfrastructureCharacterizationTests() {
   results.push(runCharacterizationTest('AILou(5) level survives clone()', testAILouLevelSurvivesClone));
   results.push(runCharacterizationTest('AILou(5) level survives saveGameState()', testAILouLevelSurvivesSaveGameState));
   results.push(runCharacterizationTest('AILou(5) level survives loadGameState()', testAILouLevelSurvivesLoadGameState));
-  results.push(runCharacterizationTest('AILou(5) level survives tryActions rollback snapshot', testAILouLevelSurvivesTryActionsRollbackSnapshot));
-  results.push(runCharacterizationTest('AILou sequential construction uses the most recently constructed level', testAILouSequentialConstructionLastLevelWins));
+  results.push(runCharacterizationTest('AILou(5) level survives a real tryActions snapshot path', testAILouLevelSurvivesTryActionsSnapshot));
+  results.push(runCharacterizationTest('AILou sequential construction keeps instance levels independent', testAILouSequentialConstructionKeepsLevelsIndependent));
   results.push(runCharacterizationTest('save/load round-trips simulation-relevant game and state fields', testSaveRestoreRoundTripForSimulationState));
   results.push(runCharacterizationTest('saved state remains reusable after load', testSavedStateRemainsReusableAfterLoad));
 
