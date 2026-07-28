@@ -131,17 +131,31 @@ function queueHumanState(state, helptext, fun) {
 
 var pactions = []; //your sequence of actions until you press "execute"
 
-// A completed action is submitted on the next event-loop turn.  Deferring by
-// one tick lets a single UI event add all of its follow-up choices first (for
-// example power spades followed by a map click), while independent clicks run
-// immediately.  Undo remains the normal way to correct a submitted action.
+// A completed action is submitted on the next event-loop turn when automatic
+// execution is enabled. Deferring by one tick lets a single UI event add all
+// of its follow-up choices first (for example power spades followed by a map
+// click), while independent clicks run immediately. Undo remains the normal
+// way to correct a submitted action.
+var automaticExecutionEnabled = true;
 var automaticExecutionPending = false;
+
+function toggleAutomaticExecution() {
+  automaticExecutionEnabled = !automaticExecutionEnabled;
+  updateActionPlanSummary();
+  if(automaticExecutionEnabled) {
+    setHelp('Auto-run enabled. Completed turn plans will run automatically.');
+    scheduleAutomaticExecution();
+  } else {
+    setHelp('Auto-run disabled. Add actions to the turn plan, then click RUN TURN when ready.');
+  }
+}
+
 function scheduleAutomaticExecution() {
-  if(automaticExecutionPending || !executeButtonFun_ || state.type != S_ACTION) return;
+  if(!automaticExecutionEnabled || automaticExecutionPending || !executeButtonFun_ || state.type != S_ACTION) return;
   automaticExecutionPending = true;
   window.setTimeout(function() {
     automaticExecutionPending = false;
-    if(state.type == S_ACTION && executeButtonFun_ && pactions.length > 0 && !humanStateBusy()) {
+    if(automaticExecutionEnabled && state.type == S_ACTION && executeButtonFun_ && pactions.length > 0 && !humanStateBusy()) {
       executeButtonFun();
     }
   }, 0);
@@ -440,7 +454,10 @@ Human.prototype.doAction = function(playerIndex, callback) {
     var undoGameState = saveGameState(game, state, logText)
     actionEl.innerHTML = '';
     var error = callback(playerIndex, pactions);
-    pactions = [];
+    // tryActions restores the game state on failure. Keep the draft too, so
+    // the player can turn auto-run off and add the required turn action (for
+    // example after starting with a resource conversion).
+    if(error == '') pactions = [];
     updateActionPlanSummary();
     if(error != '') {
       setHelp('Execute action error: ' + error);
@@ -746,9 +763,14 @@ Human.prototype.leechPower = function(playerIndex, fromPlayer, amount, vpcost, r
   heading.style.fontSize = '25px';
   heading.style.fontWeight = 'bold';
   heading.style.zIndex = 2002;
-  var from = makeText(panelX + 24, panelY + 52, getFullName(game.players[fromPlayer]) + ' triggered a neighbouring building.', popupElement);
+  // Keep this line inside the panel. Player names are both redundant here and
+  // can make the notification extend past the left edge after the panel moves.
+  var from = makeText(panelX + 24, panelY + 52,
+      getFactionName(game.players[fromPlayer].faction) + ' triggered a neighbouring building.', popupElement);
   from.style.color = '#70543a';
   from.style.fontSize = '13px';
+  from.style.width = (panelW - 48) + 'px';
+  from.style.lineHeight = '17px';
   from.style.zIndex = 2002;
 
   var power = makeSizedDiv(panelX + 24, panelY + 79, 122, 42, popupElement);

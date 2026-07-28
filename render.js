@@ -1255,8 +1255,26 @@ function getRoundTileDetails(tile) {
   return null;
 }
 
-function renderRoundTile(px, py, tile, details, index) {
-  var el = makeSizedDiv(px, py, 70, 60, hudElement);
+// The scoring strip uses the same tile component as the compact reference
+// areas, but can scale it up without changing the meaning or icon language.
+function renderRoundTile(px, py, tile, details, index, scale, parent) {
+  scale = scale || 1;
+  parent = parent || hudElement;
+  var drawParent = parent;
+  var drawX = px;
+  var drawY = py;
+
+  if(scale != 1) {
+    var scaledTile = makeSizedDiv(px, py, 70 * scale, 60 * scale, parent);
+    scaledTile.style.overflow = 'visible';
+    drawParent = makeSizedDiv(0, 0, 70, 60, scaledTile);
+    drawParent.style.transformOrigin = '0 0';
+    drawParent.style.transform = 'scale(' + scale + ')';
+    drawX = 0;
+    drawY = 0;
+  }
+
+  var el = makeSizedDiv(drawX, drawY, 70, 60, drawParent);
   el.style.boxSizing = 'border-box';
   el.style.border = (index == state.round && state.type != S_GAME_OVER) ? '3px solid #d3aa4a' : '2px solid #322d3d';
   el.style.borderRadius = '4px';
@@ -1266,48 +1284,48 @@ function renderRoundTile(px, py, tile, details, index) {
   el.style.boxShadow = (index == state.round && state.type != S_GAME_OVER) ? '0 0 0 2px rgba(255,237,165,.62), 0 3px 6px rgba(72,56,23,.38), inset 0 0 0 1px rgba(255,248,204,.48)' : '0 2px 3px rgba(20,17,25,.38), inset 0 0 0 1px rgba(238,224,180,.38)';
   el.title = tileToHelpString(tile, true);
 
-  var inner = makeSizedDiv(px + 4, py + 4, 62, 52, hudElement);
+  var inner = makeSizedDiv(drawX + 4, drawY + 4, 62, 52, drawParent);
   inner.style.boxSizing = 'border-box';
   inner.style.border = '1px solid rgba(238,224,180,.48)';
   inner.style.pointerEvents = 'none';
 
-  drawTileIcon(px + 7, py + 6, details.trigger, hudElement, false);
+  drawTileIcon(drawX + 7, drawY + 6, details.trigger, drawParent, false);
   if(details.triggerLabel) {
-    var triggerLabel = makeSizedDiv(px + 4, py + 21, 24, 7, hudElement);
+    var triggerLabel = makeSizedDiv(drawX + 4, drawY + 21, 24, 7, drawParent);
     styleBonusTileText(triggerLabel, 5, 'bold', '#f5ecd1');
     triggerLabel.innerHTML = details.triggerLabel;
   }
-  drawTileArrow(px + 29, py + 9, hudElement);
-  drawVPBadge(px + 43, py + 6, details.vp, hudElement);
+  drawTileArrow(drawX + 29, drawY + 9, drawParent);
+  drawVPBadge(drawX + 43, drawY + 6, details.vp, drawParent);
 
-  var divider = makeSizedDiv(px + 6, py + 29, 58, 1, hudElement);
+  var divider = makeSizedDiv(drawX + 6, drawY + 29, 58, 1, drawParent);
   divider.style.background = 'rgba(238,224,180,.58)';
   divider.style.fontSize = '0%';
 
   if(details.cult == 'priest') {
-    drawTileIcon(px + 8, py + 35, 'priest', hudElement, true);
-    var priestLabel = makeSizedDiv(px + 20, py + 38, 13, 8, hudElement);
+    drawTileIcon(drawX + 8, drawY + 35, 'priest', drawParent, true);
+    var priestLabel = makeSizedDiv(drawX + 20, drawY + 38, 13, 8, drawParent);
     styleBonusTileText(priestLabel, 7, 'bold', '#f6efd9');
     priestLabel.style.textAlign = 'left';
     priestLabel.innerHTML = '×';
   } else {
-    drawCultRequirement(px + 7, py + 34, details.cult, details.threshold, hudElement);
+    drawCultRequirement(drawX + 7, drawY + 34, details.cult, details.threshold, drawParent);
   }
-  drawTileArrow(px + 35, py + 36, hudElement);
-  drawTileReward(px + 47, py + 34, details.reward, hudElement);
+  drawTileArrow(drawX + 35, drawY + 36, drawParent);
+  drawTileReward(drawX + 47, drawY + 34, details.reward, drawParent);
 
-  var roundLabel = makeSizedDiv(px + 2, py - 12, 66, 10, hudElement);
+  var roundLabel = makeSizedDiv(drawX + 2, drawY - 12, 66, 10, drawParent);
   styleBonusTileText(roundLabel, 8, 'bold', '#493f38');
   roundLabel.style.textAlign = 'left';
   roundLabel.innerHTML = 'ROUND ' + index;
 
-  return [71, 61];
+  return [71 * scale, 61 * scale];
 }
 
-function drawRoundTile(px, py, tile, index) {
+function drawRoundTile(px, py, tile, index, scale, parent) {
   var details = getRoundTileDetails(tile);
   if(!details) return [0, 0];
-  return renderRoundTile(px, py, tile, details, index);
+  return renderRoundTile(px, py, tile, details, index, scale, parent);
 }
 
 //returns draw width
@@ -1503,10 +1521,12 @@ function drawTilesArray(px, py, tiles, maxWidth, startX, onTileClick) {
   return [px2, py2];
 }
 
-function renderFinalScoringTile(px, py, text1, text2, text3, text4, text5, text6, title) {
-  var width = 120;
-  var height = 70;
-  var el = makeSizedDiv(px, py, width, height, hudElement);
+function renderFinalScoringTile(px, py, text1, text2, text3, text4, text5, text6, title, width, height, parent) {
+  width = width || 120;
+  height = height || 70;
+  parent = parent || hudElement;
+  var prominent = height > 90;
+  var el = makeSizedDiv(px, py, width, height, parent);
   el.style.boxSizing = 'border-box';
   el.style.border = '2px solid #5b432d';
   el.style.borderRadius = '7px';
@@ -1514,7 +1534,13 @@ function renderFinalScoringTile(px, py, text1, text2, text3, text4, text5, text6
   el.style.boxShadow = '0 2px 4px rgba(54,34,17,.32), inset 0 0 0 1px rgba(255,247,213,.75)';
   el.title = title;
 
-  drawSharedHeader(px + 3, py + 3, width - 6, 'FINAL', hudElement);
+  var finalHeader = drawSharedHeader(px + 3, py + 3, width - 6, 'FINAL SCORING', parent);
+  if(prominent) {
+    finalHeader.style.height = '22px';
+    finalHeader.style.paddingTop = '5px';
+    finalHeader.style.fontSize = '11px';
+    finalHeader.style.textAlign = 'center';
+  }
   var rows = [
     {label: text1 == 'cults:' ? 'CULT' : text1.replace(':', '').toUpperCase(), value: text2},
     {label: text3 == 'network:' ? 'NET' : text3.replace(':', '').toUpperCase(), value: text4},
@@ -1522,11 +1548,11 @@ function renderFinalScoringTile(px, py, text1, text2, text3, text4, text5, text6
   ];
   for(var i = 0; i < rows.length; i++) {
     if(!rows[i].label) continue;
-    var row = makeSizedDiv(px + 7, py + 23 + i * 14, width - 14, 12, hudElement);
+    var row = makeSizedDiv(px + 10, py + (prominent ? 35 : 23) + i * (prominent ? 30 : 14), width - 20, prominent ? 26 : 12, parent);
     row.style.boxSizing = 'border-box';
     row.style.borderTop = i ? '1px solid rgba(96,65,36,.22)' : '0';
     row.style.color = '#56371f';
-    row.style.fontSize = '8px';
+    row.style.fontSize = prominent ? '12px' : '8px';
     row.style.fontWeight = 'bold';
     row.innerHTML = rows[i].label + '<span style="float:right">' + rows[i].value + '</span>';
   }
@@ -1534,7 +1560,7 @@ function renderFinalScoringTile(px, py, text1, text2, text3, text4, text5, text6
   return [width + 1, height + 1];
 }
 
-function drawFinalScoringTile(px, py, index) {
+function drawFinalScoringTile(px, py, index, width, height, parent) {
   var text1 = 'cults:';
   var text2 = '8/4/2';
   var text3 = 'network:';
@@ -1543,7 +1569,7 @@ function drawFinalScoringTile(px, py, index) {
   var text6 = '18/12/6';
   if(text5 == 'none:') text5 = text6 = '';
   var title = finalScoringCodeNames[index];
-  return renderFinalScoringTile(px, py, text1, text2, text3, text4, text5, text6, title);
+  return renderFinalScoringTile(px, py, text1, text2, text3, text4, text5, text6, title, width, height, parent);
 }
 
 //convert a cost array to a string, ignoring things that are 0.
@@ -1868,11 +1894,15 @@ function drawPlayerPanel(px, py, player, scoreProjection, compactWidth) {
   co = drawTilesMap(px + 320 + px2, py + 10 + py2, player.towntiles, 600 - px2, px + 320, null);
 }
 
-// The board and the live faction state form the primary play surface. Public
-// tiles stay below it as a reference shelf instead of competing for attention.
-var PLAYER_PANEL_TOP = 530;
+// The public scoring strip is the first thing below the board. Actions follow,
+// then the active player's faction board and the other faction cards.
+var ROUND_SCORING_TOP = 530;
+var ACTIONS_TOP = 760;
+var USER_FACTION_BOARD_TOP = 930;
+var PLAYER_PANEL_TOP = 1390;
 var PLAYER_PANEL_HEIGHT = 112;
-var GAMEPLAY_BOTTOM = 2030;
+var SUPPLY_TOP = 1530;
+var GAMEPLAY_BOTTOM = 2175;
 
 // Base-game faction boards, sourced from the individual faction pages linked
 // by Gaming Strategy. Keep this map keyed by the game constants so factions
@@ -1898,48 +1928,6 @@ function getUserFactionBoardPlayer() {
     if(game.players[i].human) return game.players[i];
   }
   return null;
-}
-
-function drawFactionBoardStatus(parent, player) {
-  var travelLabel = player.maxtunnelcarpetdistance > 0 ? 'Range' : 'Shipping';
-  var travelValue = player.maxtunnelcarpetdistance > 0 ?
-      player.tunnelcarpetdistance + '/' + player.maxtunnelcarpetdistance :
-      getShipping(player, false) + '/' + player.maxshipping;
-  var diggingValue = player.maxdigging < 0 ? 'N/A' : player.digging + '/' + player.maxdigging;
-  var rows = [
-    ['D', built_d(player) + '/8'],
-    ['TP', built_tp(player) + '/4'],
-    ['TE', built_te(player) + '/3'],
-    ['SH', built_sh(player) + '/1'],
-    ['SA', built_sa(player) + '/1'],
-    ['Digging', diggingValue],
-    [travelLabel, travelValue]
-  ];
-
-  var status = makeSizedDiv(28, 88, 220, 210, parent);
-  status.style.boxSizing = 'border-box';
-  status.style.padding = '12px 14px';
-  status.style.border = '2px solid #6d4a2f';
-  status.style.borderRadius = '9px';
-  status.style.background = 'linear-gradient(145deg, rgba(255,250,232,.94), rgba(225,197,139,.90))';
-  status.style.boxShadow = '0 3px 7px rgba(55,39,24,.22), inset 0 1px 0 rgba(255,255,255,.66)';
-
-  var heading = makeText(0, 0, 'LIVE STATUS', status);
-  heading.style.color = '#51351f';
-  heading.style.fontSize = '10px';
-  heading.style.fontWeight = 'bold';
-  heading.style.letterSpacing = '.5px';
-
-  for(var i = 0; i < rows.length; i++) {
-    var row = makeSizedDiv(0, 27 + i * 23, 190, 19, status);
-    row.style.boxSizing = 'border-box';
-    row.style.padding = '3px 4px';
-    row.style.borderTop = i ? '1px solid rgba(97,67,38,.22)' : '0';
-    row.style.color = '#4c3120';
-    row.style.fontSize = '11px';
-    row.style.fontWeight = 'bold';
-    row.innerHTML = rows[i][0] + ':<span style="float:right">' + rows[i][1] + '</span>';
-  }
 }
 
 function drawUserFactionBoard(px, py, width) {
@@ -1982,7 +1970,30 @@ function drawUserFactionBoard(px, py, width) {
   boardImage.style.height = '386px';
   boardImage.style.objectFit = 'contain';
   boardImage.style.filter = 'drop-shadow(0 3px 4px rgba(55,39,24,.26))';
-  drawFactionBoardStatus(boardPanel, player);
+
+  // The actual player card contains this same state plus resources, VP, and
+  // income, so keeping it beside the board is clearer than a second summary.
+  drawCompactPlayerPanel(px + 24, py + 68, 260, player);
+}
+
+// Six round tiles plus final scoring occupy seven equal columns. This makes
+// scoring a full-width part of the play surface rather than a small reference
+// shelf, while preserving the current-round highlight on its tile.
+function drawRoundScoringStrip(px, py, width) {
+  var gap = 8;
+  var tileWidth = Math.floor((width - gap * 6) / 7);
+  var tileScale = tileWidth / 70;
+  var tileHeight = Math.round(60 * tileScale);
+  var tileY = py + 50;
+
+  drawTileSectionHeader(px, py, width, 'ROUND & FINAL SCORING · CURRENT ROUND ' + state.round + ' / 6');
+  // Round tiles are stored with an unused zero slot so their indices match
+  // the game's 1–6 round numbers. Lay those six real tiles into columns 0–5.
+  for(var i = 1; i < game.roundtiles.length; i++) {
+    drawRoundTile(px + (i - 1) * (tileWidth + gap), tileY, game.roundtiles[i], i, tileScale);
+  }
+  drawFinalScoringTile(px + 6 * (tileWidth + gap), tileY, game.finalscoring, tileWidth, tileHeight);
+  return tileY + tileHeight - py;
 }
 
 //if onTileClick not null, added as onclick for the tile elements. Gets the tile as argument.
@@ -1993,34 +2004,33 @@ function drawHud2(players, onTileClickMain) {
   drawHumanColorWheel();
   var scoreProjection;
   if(state.round == 6) scoreProjection = projectEndGameScores();
-  var playerGap = 6;
-  var dashboardWidth = Math.floor((GAMEPLAY_WIDTH - 10 - playerGap * (players.length - 1)) / players.length);
+  var factionCards = [];
   for(var i = 0; i < players.length; i++) {
-    drawPlayerPanel(5 + i * (dashboardWidth + playerGap), PLAYER_PANEL_TOP, players[i], scoreProjection, dashboardWidth);
+    if(!players[i].human) factionCards.push(players[i]);
   }
 
-  // Everything below the board flows in one vertical reading order. This
-  // prevents the action area, turn plan and reference shelves from competing
-  // for the same horizontal band on narrower screens.
-  drawHumanUI(5, 660, state.showResourcesPlayer);
-  drawCurrentRoundFocus(537, 755, 520);
+  drawRoundScoringStrip(5, ROUND_SCORING_TOP, GAMEPLAY_WIDTH - 10);
 
-  // Keep the player's physical board directly above the public scoring
-  // reference, mirroring the order in which it is used during play.
-  drawUserFactionBoard(5, 840, GAMEPLAY_WIDTH - 10);
+  drawHumanUI(5, ACTIONS_TOP, state.showResourcesPlayer);
+  drawUserFactionBoard(5, USER_FACTION_BOARD_TOP, GAMEPLAY_WIDTH - 10);
 
-  // A single heading covers both related pieces; the final-scoring tile does
-  // not repeat its own heading inside the section.
-  drawTileSectionHeader(5, 1265, GAMEPLAY_WIDTH - 10, 'ROUND & FINAL SCORING');
-  drawTilesArray(5, 1297, game.roundtiles, 450, 5, onTileClickMain);
-  drawFinalScoringTile(462, 1297, game.finalscoring);
-  drawTileSectionHeader(5, 1400, GAMEPLAY_WIDTH - 10, 'AVAILABLE BONUS TILES');
-  drawTilesMap(5, 1431, game.bonustiles, GAMEPLAY_WIDTH - 12, 5, onTileClickMain);
-  drawTileSectionHeader(5, 1525, GAMEPLAY_WIDTH - 10, 'TOWN REWARDS');
-  drawTilesMap(5, 1566, game.towntiles, GAMEPLAY_WIDTH - 12, 5, onTileClickMain);
-  drawTileSectionHeader(5, 1650, GAMEPLAY_WIDTH - 10, 'FAVOR TILES');
-  drawFavorTilesGrid(5, 1675, game.favortiles, onTileClickMain);
-  drawClaimedTilesLedger(5, 1845, GAMEPLAY_WIDTH - 10, players);
+  if(factionCards.length) {
+    var playerGap = 6;
+    var dashboardWidth = Math.min(400, Math.floor((GAMEPLAY_WIDTH - 10 - playerGap * (factionCards.length - 1)) / factionCards.length));
+    drawTileSectionHeader(5, PLAYER_PANEL_TOP - 24, GAMEPLAY_WIDTH - 10, 'OTHER FACTION CARDS');
+    for(var cardIndex = 0; cardIndex < factionCards.length; cardIndex++) {
+      drawPlayerPanel(5 + cardIndex * (dashboardWidth + playerGap), PLAYER_PANEL_TOP,
+          factionCards[cardIndex], scoreProjection, dashboardWidth);
+    }
+  }
+
+  drawTileSectionHeader(5, SUPPLY_TOP, GAMEPLAY_WIDTH - 10, 'AVAILABLE BONUS TILES');
+  drawTilesMap(5, SUPPLY_TOP + 31, game.bonustiles, GAMEPLAY_WIDTH - 12, 5, onTileClickMain);
+  drawTileSectionHeader(5, SUPPLY_TOP + 125, GAMEPLAY_WIDTH - 10, 'TOWN REWARDS');
+  drawTilesMap(5, SUPPLY_TOP + 166, game.towntiles, GAMEPLAY_WIDTH - 12, 5, onTileClickMain);
+  drawTileSectionHeader(5, SUPPLY_TOP + 250, GAMEPLAY_WIDTH - 10, 'FAVOR TILES');
+  drawFavorTilesGrid(5, SUPPLY_TOP + 275, game.favortiles, onTileClickMain);
+  drawClaimedTilesLedger(5, SUPPLY_TOP + 445, GAMEPLAY_WIDTH - 10, players);
 
   drawCultTracks(CULT_PANEL_LEFT + 7, TOP_PLAY_CONTENT_Y);
   if(state.type == S_GAME_OVER) drawEndGameScoring(ACTIONPANELX, ACTIONPANELY, 0 /*playerIndex*/);
@@ -2048,7 +2058,15 @@ function drawBoardWorkspaceSurfaces() {
   cultPanel.style.boxShadow = '0 6px 14px rgba(55,39,24,.24), inset 0 0 0 1px rgba(255,255,255,.55)';
   cultPanel.style.pointerEvents = 'none';
 
-  var dashboardPanel = makeSizedDiv(0, 520, GAMEPLAY_WIDTH, 132, hudElement);
+  var scoringPanel = makeSizedDiv(0, 520, GAMEPLAY_WIDTH, 218, hudElement);
+  scoringPanel.style.boxSizing = 'border-box';
+  scoringPanel.style.border = '2px solid #624936';
+  scoringPanel.style.borderRadius = '12px';
+  scoringPanel.style.background = 'linear-gradient(145deg, rgba(255,248,225,.93), rgba(211,179,123,.88))';
+  scoringPanel.style.boxShadow = '0 5px 12px rgba(55,39,24,.22), inset 0 0 0 1px rgba(255,255,255,.62)';
+  scoringPanel.style.pointerEvents = 'none';
+
+  var dashboardPanel = makeSizedDiv(0, PLAYER_PANEL_TOP - 30, GAMEPLAY_WIDTH, 152, hudElement);
   dashboardPanel.style.boxSizing = 'border-box';
   dashboardPanel.style.border = '2px solid #624936';
   dashboardPanel.style.borderRadius = '12px';
@@ -2056,7 +2074,7 @@ function drawBoardWorkspaceSurfaces() {
   dashboardPanel.style.boxShadow = '0 5px 12px rgba(55,39,24,.18), inset 0 0 0 1px rgba(255,255,255,.55)';
   dashboardPanel.style.pointerEvents = 'none';
 
-  var supplyPanel = makeSizedDiv(0, 830, GAMEPLAY_WIDTH, 1050, hudElement);
+  var supplyPanel = makeSizedDiv(0, SUPPLY_TOP - 10, GAMEPLAY_WIDTH, 655, hudElement);
   supplyPanel.style.boxSizing = 'border-box';
   supplyPanel.style.border = '2px solid #624936';
   supplyPanel.style.borderRadius = '12px';
@@ -2597,6 +2615,7 @@ function drawActionMapTargetHints(parent) {
 
 var actionPlanSummaryElement = null;
 var actionPlanTextElement = null;
+var actionPlanAutoRunButton = null;
 var actionPlanExecuteButton = null;
 var actionPlanClearButton = null;
 
@@ -2607,6 +2626,7 @@ function updateActionPlanSummary() {
   // shell before updating it so the automatic-turn status remains available
   // for every path.
   if(!actionPlanTextElement || !actionPlanSummaryElement.contains(actionPlanTextElement) ||
+      !actionPlanAutoRunButton || !actionPlanSummaryElement.contains(actionPlanAutoRunButton) ||
       !actionPlanExecuteButton || !actionPlanSummaryElement.contains(actionPlanExecuteButton)) {
     if(state.type == S_ACTION && getCurrentPlayer() && getCurrentPlayer().human) {
       drawActionPlanSummary(getCurrentPlayer());
@@ -2618,14 +2638,23 @@ function updateActionPlanSummary() {
   actionPlanSummaryElement.title = pactions.length ? plan : 'No actions planned yet.';
 
   var hasPlan = pactions.length > 0;
-  actionPlanExecuteButton.style.background = hasPlan ? 'linear-gradient(145deg, #53b978, #17643b)' : 'linear-gradient(145deg, #b99c67, #765d3e)';
-  actionPlanExecuteButton.style.borderColor = hasPlan ? '#0f4b2b' : '#5a442d';
-  actionPlanExecuteButton.style.boxShadow = hasPlan ? '0 3px 5px rgba(18,79,42,.42), inset 0 1px 1px rgba(255,255,255,.24)' : '0 2px 3px rgba(70,49,27,.28), inset 0 1px 1px rgba(255,255,255,.28)';
-  actionPlanExecuteButton.style.cursor = 'default';
-  actionPlanExecuteButton.style.opacity = '1';
-  actionPlanExecuteButton.innerHTML = hasPlan ? 'AUTO-RUNNING' : 'AUTO-RUN';
-  actionPlanExecuteButton.title = hasPlan ? 'This action runs as soon as every required choice is complete.' : 'Actions run automatically after you make the required choices.';
-  actionPlanExecuteButton.onclick = null;
+  actionPlanAutoRunButton.style.background = automaticExecutionEnabled ? 'linear-gradient(145deg, #4b91d0, #24537e)' : 'linear-gradient(145deg, #b99c67, #765d3e)';
+  actionPlanAutoRunButton.style.borderColor = automaticExecutionEnabled ? '#1c4265' : '#5a442d';
+  actionPlanAutoRunButton.style.boxShadow = automaticExecutionEnabled ? '0 3px 5px rgba(24,64,102,.42), inset 0 1px 1px rgba(255,255,255,.24)' : '0 2px 3px rgba(70,49,27,.28), inset 0 1px 1px rgba(255,255,255,.28)';
+  actionPlanAutoRunButton.style.cursor = 'pointer';
+  actionPlanAutoRunButton.innerHTML = 'AUTO-RUN: ' + (automaticExecutionEnabled ? 'ON' : 'OFF');
+  actionPlanAutoRunButton.title = automaticExecutionEnabled ? 'Click to disable automatic execution.' : 'Click to enable automatic execution.';
+  actionPlanAutoRunButton.onclick = toggleAutomaticExecution;
+
+  var canRun = hasPlan && !humanStateBusy();
+  actionPlanExecuteButton.style.background = canRun ? 'linear-gradient(145deg, #53b978, #17643b)' : 'linear-gradient(145deg, #b99c67, #765d3e)';
+  actionPlanExecuteButton.style.borderColor = canRun ? '#0f4b2b' : '#5a442d';
+  actionPlanExecuteButton.style.boxShadow = canRun ? '0 3px 5px rgba(18,79,42,.42), inset 0 1px 1px rgba(255,255,255,.24)' : '0 2px 3px rgba(70,49,27,.28), inset 0 1px 1px rgba(255,255,255,.28)';
+  actionPlanExecuteButton.style.cursor = canRun ? 'pointer' : 'default';
+  actionPlanExecuteButton.style.opacity = canRun ? '1' : '.55';
+  actionPlanExecuteButton.innerHTML = automaticExecutionEnabled ? 'RUN NOW' : 'RUN TURN';
+  actionPlanExecuteButton.title = canRun ? 'Run the current turn plan now.' : 'Add an action and finish any required choices before running.';
+  actionPlanExecuteButton.onclick = canRun ? executeButtonFun : null;
 
   actionPlanClearButton.style.opacity = hasPlan ? '1' : '.45';
   actionPlanClearButton.style.cursor = hasPlan ? 'pointer' : 'default';
@@ -2651,7 +2680,7 @@ function drawActionPlanSummary(player) {
   actionPlanTextElement.style.whiteSpace = 'nowrap';
   actionPlanTextElement.style.textOverflow = 'ellipsis';
 
-  actionPlanClearButton = makeSizedDiv(238, 4, 112, 35, actionEl);
+  actionPlanClearButton = makeSizedDiv(238, 4, 88, 35, actionEl);
   actionPlanClearButton.style.boxSizing = 'border-box';
   actionPlanClearButton.style.padding = '10px 3px';
   actionPlanClearButton.style.background = 'linear-gradient(145deg, #d97761, #913f36)';
@@ -2664,9 +2693,20 @@ function drawActionPlanSummary(player) {
   actionPlanClearButton.style.userSelect = 'none';
   actionPlanClearButton.innerHTML = 'CLEAR PLAN';
 
-  actionPlanExecuteButton = makeSizedDiv(357, 4, 154, 35, actionEl);
+  actionPlanAutoRunButton = makeSizedDiv(332, 4, 92, 35, actionEl);
+  actionPlanAutoRunButton.style.boxSizing = 'border-box';
+  actionPlanAutoRunButton.style.padding = '10px 2px';
+  actionPlanAutoRunButton.style.border = '2px solid #1c4265';
+  actionPlanAutoRunButton.style.borderRadius = '6px';
+  actionPlanAutoRunButton.style.color = '#fffdf0';
+  actionPlanAutoRunButton.style.fontSize = '9px';
+  actionPlanAutoRunButton.style.fontWeight = 'bold';
+  actionPlanAutoRunButton.style.textAlign = 'center';
+  actionPlanAutoRunButton.style.userSelect = 'none';
+
+  actionPlanExecuteButton = makeSizedDiv(430, 4, 81, 35, actionEl);
   actionPlanExecuteButton.style.boxSizing = 'border-box';
-  actionPlanExecuteButton.style.padding = '3px';
+  actionPlanExecuteButton.style.padding = '10px 2px';
   actionPlanExecuteButton.style.border = '2px solid #0f4b2b';
   actionPlanExecuteButton.style.borderRadius = '6px';
   actionPlanExecuteButton.style.color = '#fffdf0';

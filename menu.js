@@ -380,7 +380,7 @@ function renderPreScreen(px, py, standardButtonFun, randomButtonFun, beginnerBut
     ' the game will resolve conflicts (such as choosing two factions of the same color or the same round tile twice) automatically with random selection.</p>' +
     '<h4>Performing Actions</h4>' +
     '<p>When it is your turn, actions run automatically once every required choice is complete. For example, choose an action and then its map, cult, favor, or town target; the game submits it immediately.' +
-    ' Use Undo if you want to take it back. Depending on the action, the on-screen instructions will tell you what to choose next.</p>' +
+    ' Use the AUTO-RUN toggle in the turn plan to turn this off, then press RUN TURN when your full plan is ready (for example, after resource conversions). Use Undo if you want to take it back. Depending on the action, the on-screen instructions will tell you what to choose next.</p>' +
     '<p>After doing an action, you can press Next to cycle through the AI\'s actions, or Fast to go through them faster.</p>' +
     '<p>To get the basic idea, here are some click sequences for typical actions:<br/>' +
     ' -dig&build: click on a map tile. It will automatically do as many dig actions as needed to make the tile your color, put a dwelling on it, and submit the action.<br/>' +
