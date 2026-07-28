@@ -38,6 +38,12 @@ document.body.appendChild(mapElement);
 // as a unit, so a player can uncover any part of the board they need.
 var GAMEPLAY_POPUP_DOCK_X = 300;
 var GAMEPLAY_POPUP_DOCK_Y = 120;
+// Keep a single visual offset for the gameplay popup layer.  The old drag
+// code only applied a temporary CSS transform; every HUD redraw cleared it,
+// which made a moved picker snap back to the centre.  A transform is still
+// used because it is composited (and therefore does not resize/reflow the
+// page), but its value now survives redraws and successive choice panels.
+var gameplayPopupOffset = {x: 0, y: 0};
 function getGameplayPopupDock(width, height) {
   width = width || 440;
   height = height || 180;
@@ -48,7 +54,7 @@ function getGameplayPopupDock(width, height) {
 }
 
 function resetGameplayPopupPosition() {
-  popupElement.style.transform = '';
+  popupElement.style.transform = 'translate3d(' + gameplayPopupOffset.x + 'px, ' + gameplayPopupOffset.y + 'px, 0)';
 }
 
 function makeGameplayPopupDragHandle(px, py, width) {
@@ -60,9 +66,13 @@ function makeGameplayPopupDragHandle(px, py, width) {
   handle.onpointerdown = function(event) {
     var originX = event.clientX;
     var originY = event.clientY;
+    var startX = gameplayPopupOffset.x;
+    var startY = gameplayPopupOffset.y;
     handle.style.cursor = 'grabbing';
     function move(moveEvent) {
-      popupElement.style.transform = 'translate(' + (moveEvent.clientX - originX) + 'px, ' + (moveEvent.clientY - originY) + 'px)';
+      gameplayPopupOffset.x = startX + moveEvent.clientX - originX;
+      gameplayPopupOffset.y = startY + moveEvent.clientY - originY;
+      resetGameplayPopupPosition();
     }
     function end() {
       handle.style.cursor = 'grab';
@@ -124,7 +134,14 @@ var logEl = makeDiv(5, 1920, document.body);
 
 //UI that pops up temporarily sometimes
 var popupElement =  document.createElement('div');
+popupElement.style.position = 'absolute';
+popupElement.style.left = '0px';
+popupElement.style.top = '0px';
+popupElement.style.width = '0px';
+popupElement.style.height = '0px';
+popupElement.style.willChange = 'transform';
 document.body.appendChild(popupElement);
+resetGameplayPopupPosition();
 
 function showGreyDialog(text, px, py) {
   var popupDock = getGameplayPopupDock(400, 180);
@@ -1358,6 +1375,119 @@ function drawFavorTilesGrid(px, py, tiles, onTileClick) {
   return [295, 158];
 }
 
+// The public supply only shows tiles that remain available. Keep a compact
+// visual ledger of claimed tiles as well, so it is always clear who holds a
+// bonus, favor, or town reward.
+function drawOwnedTileMini(parent, px, py, tile, scale, amount) {
+  var layer = makeSizedDiv(px, py, 72, 64, parent);
+  layer.style.transformOrigin = '0 0';
+  layer.style.transform = 'scale(' + scale + ')';
+  layer.style.zIndex = 2;
+  layer.title = tileToHelpString(tile, true);
+  if(tile > T_BON_BEGIN && tile < T_BON_END) drawBonusTile(0, 0, tile, null, layer);
+  else if(tile > T_FAV_BEGIN && tile < T_FAV_END) drawFavorTile(0, 0, tile, null, layer);
+  else if(tile > T_TW_BEGIN && tile < T_TW_END) drawTownTile(0, 0, tile, null, layer);
+
+  if(amount > 1) {
+    var count = makeSizedDiv(px + Math.round(46 * scale), py + Math.round(43 * scale), 15, 11, parent);
+    count.style.boxSizing = 'border-box';
+    count.style.paddingTop = '1px';
+    count.style.border = '1px solid #68472d';
+    count.style.borderRadius = '5px';
+    count.style.background = '#fff5d0';
+    count.style.color = '#4b3020';
+    count.style.fontSize = '7px';
+    count.style.fontWeight = 'bold';
+    count.style.textAlign = 'center';
+    count.style.zIndex = 3;
+    count.innerHTML = amount + '×';
+  }
+}
+
+function drawClaimedTilesLedger(px, py, width, players) {
+  drawTileSectionHeader(px, py, width, 'TILES HELD BY PLAYERS');
+  var gap = 6;
+  var cardWidth = Math.floor((width - gap * (players.length - 1)) / players.length);
+  for(var i = 0; i < players.length; i++) {
+    var player = players[i];
+    var cardX = px + i * (cardWidth + gap);
+    var compactTiles = cardWidth < 270;
+    var favorX = compactTiles ? 70 : 84;
+    var favorScale = compactTiles ? .32 : .41;
+    var favorStep = compactTiles ? 23 : 29;
+    var townX = compactTiles ? 35 : 45;
+    var townScale = compactTiles ? .42 : .52;
+    var townStep = compactTiles ? 24 : 29;
+    var card = makeSizedDiv(cardX, py + 24, cardWidth, 142, hudElement);
+    card.style.boxSizing = 'border-box';
+    card.style.border = player.index == state.currentPlayer ? '2px solid #8d6332' : '1px solid #765439';
+    card.style.borderRadius = '8px';
+    card.style.background = 'linear-gradient(145deg, #fffaf0, #e7cf9f)';
+    card.style.boxShadow = '0 2px 4px rgba(70,45,24,.16), inset 0 0 0 1px rgba(255,255,255,.65)';
+    card.style.overflow = 'hidden';
+
+    var factionColor = getImageColor(player.woodcolor);
+    var name = makeSizedDiv(4, 4, cardWidth - 8, 18, card);
+    name.style.boxSizing = 'border-box';
+    name.style.padding = '3px 6px';
+    name.style.borderRadius = '4px';
+    name.style.background = factionColor;
+    name.style.color = getHighContrastColor(factionColor);
+    name.style.fontSize = '9px';
+    name.style.fontWeight = 'bold';
+    name.style.overflow = 'hidden';
+    name.style.whiteSpace = 'nowrap';
+    name.style.textOverflow = 'ellipsis';
+    name.title = getFullName(player);
+    name.innerHTML = getFullName(player).toUpperCase();
+
+    var bonusLabel = makeText(6, 33, 'BONUS', card);
+    bonusLabel.style.color = '#63472d';
+    bonusLabel.style.fontSize = '7px';
+    bonusLabel.style.fontWeight = 'bold';
+    if(player.bonustile != T_NONE) drawOwnedTileMini(card, 45, 25, player.bonustile, .62, 1);
+    else {
+      var none = makeText(45, 34, 'none', card);
+      none.style.color = '#94755a';
+      none.style.fontSize = '8px';
+    }
+
+    var favorLabel = makeText(favorX, 27, 'FAVOR', card);
+    favorLabel.style.color = '#63472d';
+    favorLabel.style.fontSize = '7px';
+    favorLabel.style.fontWeight = 'bold';
+    var favorIndex = 0;
+    for(var favor = T_FAV_BEGIN + 1; favor < T_FAV_END; favor++) {
+      var favorAmount = player.favortiles[favor] || 0;
+      if(!favorAmount) continue;
+      drawOwnedTileMini(card, favorX + (favorIndex % 7) * favorStep, 37 + Math.floor(favorIndex / 7) * (compactTiles ? 18 : 23), favor, favorScale, favorAmount);
+      favorIndex++;
+    }
+    if(!favorIndex) {
+      var noFavor = makeText(favorX + 40, 47, 'none', card);
+      noFavor.style.color = '#94755a';
+      noFavor.style.fontSize = '8px';
+    }
+
+    var townLabel = makeText(6, 92, 'TOWN', card);
+    townLabel.style.color = '#63472d';
+    townLabel.style.fontSize = '7px';
+    townLabel.style.fontWeight = 'bold';
+    var townIndex = 0;
+    for(var town = T_TW_BEGIN + 1; town < T_TW_END; town++) {
+      var townAmount = player.towntiles[town] || 0;
+      if(!townAmount) continue;
+      drawOwnedTileMini(card, townX + (townIndex % 8) * townStep, 83 + Math.floor(townIndex / 8) * (compactTiles ? 23 : 28), town, townScale, townAmount);
+      townIndex++;
+    }
+    if(!townIndex) {
+      var noTown = makeText(townX, 93, 'none', card);
+      noTown.style.color = '#94755a';
+      noTown.style.fontSize = '8px';
+    }
+  }
+}
+
 function drawTilesArray(px, py, tiles, maxWidth, startX, onTileClick) {
   var px2 = 0;
   var py2 = 0;
@@ -1592,6 +1722,8 @@ function drawCompactPlayerPanel(px, py, width, player) {
   advances.innerHTML = 'DIG ' + player.digging + '/' + player.maxdigging + ' · ' + travel;
 
   var income = getIncome(player, player.passed, state.round);
+  var dangerp = income[2] > player.pp - player.p;
+  var dangerpw = income[3] > player.pw0 * 2 + player.pw1;
   var incomeBar = makeSizedDiv(px + 4, py + 88, width - 8, 19, hudElement);
   incomeBar.style.boxSizing = 'border-box';
   incomeBar.style.padding = '4px 6px';
@@ -1601,7 +1733,8 @@ function drawCompactPlayerPanel(px, py, width, player) {
   incomeBar.style.color = '#294522';
   incomeBar.style.fontSize = '8px';
   incomeBar.style.fontWeight = 'bold';
-  incomeBar.innerHTML = 'NEXT +' + income[0] + ' C  +' + income[1] + ' W  +' + income[2] + ' P  +' + income[3] + ' PW';
+  incomeBar.innerHTML = 'NEXT +' + income[0] + ' C  +' + income[1] + ' W  +' +
+      dangerColor(dangerp, income[2] + ' P') + '  +' + dangerColor(dangerpw, income[3] + ' PW');
 }
 
 function drawPlayerPanel(px, py, player, scoreProjection, compactWidth) {
@@ -1739,7 +1872,118 @@ function drawPlayerPanel(px, py, player, scoreProjection, compactWidth) {
 // tiles stay below it as a reference shelf instead of competing for attention.
 var PLAYER_PANEL_TOP = 530;
 var PLAYER_PANEL_HEIGHT = 112;
-var GAMEPLAY_BOTTOM = 1470;
+var GAMEPLAY_BOTTOM = 2030;
+
+// Base-game faction boards, sourced from the individual faction pages linked
+// by Gaming Strategy. Keep this map keyed by the game constants so factions
+// chosen during setup immediately show the matching physical player board.
+var FACTION_BOARD_IMAGES = {};
+FACTION_BOARD_IMAGES[F_CHAOS] = 'faction-boards/chaos.jpg';
+FACTION_BOARD_IMAGES[F_GIANTS] = 'faction-boards/giants.jpg';
+FACTION_BOARD_IMAGES[F_FAKIRS] = 'faction-boards/fakirs.jpg';
+FACTION_BOARD_IMAGES[F_NOMADS] = 'faction-boards/nomads.jpg';
+FACTION_BOARD_IMAGES[F_HALFLINGS] = 'faction-boards/halflings.jpg';
+FACTION_BOARD_IMAGES[F_CULTISTS] = 'faction-boards/cultists.jpg';
+FACTION_BOARD_IMAGES[F_ALCHEMISTS] = 'faction-boards/alchemists.jpg';
+FACTION_BOARD_IMAGES[F_DARKLINGS] = 'faction-boards/darklings.jpg';
+FACTION_BOARD_IMAGES[F_MERMAIDS] = 'faction-boards/mermaids.jpg';
+FACTION_BOARD_IMAGES[F_SWARMLINGS] = 'faction-boards/swarmlings.jpg';
+FACTION_BOARD_IMAGES[F_AUREN] = 'faction-boards/auren.jpg';
+FACTION_BOARD_IMAGES[F_WITCHES] = 'faction-boards/witches.jpg';
+FACTION_BOARD_IMAGES[F_ENGINEERS] = 'faction-boards/engineers.jpg';
+FACTION_BOARD_IMAGES[F_DWARVES] = 'faction-boards/dwarves.jpg';
+
+function getUserFactionBoardPlayer() {
+  for(var i = 0; i < game.players.length; i++) {
+    if(game.players[i].human) return game.players[i];
+  }
+  return null;
+}
+
+function drawFactionBoardStatus(parent, player) {
+  var travelLabel = player.maxtunnelcarpetdistance > 0 ? 'Range' : 'Shipping';
+  var travelValue = player.maxtunnelcarpetdistance > 0 ?
+      player.tunnelcarpetdistance + '/' + player.maxtunnelcarpetdistance :
+      getShipping(player, false) + '/' + player.maxshipping;
+  var diggingValue = player.maxdigging < 0 ? 'N/A' : player.digging + '/' + player.maxdigging;
+  var rows = [
+    ['D', built_d(player) + '/8'],
+    ['TP', built_tp(player) + '/4'],
+    ['TE', built_te(player) + '/3'],
+    ['SH', built_sh(player) + '/1'],
+    ['SA', built_sa(player) + '/1'],
+    ['Digging', diggingValue],
+    [travelLabel, travelValue]
+  ];
+
+  var status = makeSizedDiv(28, 88, 220, 210, parent);
+  status.style.boxSizing = 'border-box';
+  status.style.padding = '12px 14px';
+  status.style.border = '2px solid #6d4a2f';
+  status.style.borderRadius = '9px';
+  status.style.background = 'linear-gradient(145deg, rgba(255,250,232,.94), rgba(225,197,139,.90))';
+  status.style.boxShadow = '0 3px 7px rgba(55,39,24,.22), inset 0 1px 0 rgba(255,255,255,.66)';
+
+  var heading = makeText(0, 0, 'LIVE STATUS', status);
+  heading.style.color = '#51351f';
+  heading.style.fontSize = '10px';
+  heading.style.fontWeight = 'bold';
+  heading.style.letterSpacing = '.5px';
+
+  for(var i = 0; i < rows.length; i++) {
+    var row = makeSizedDiv(0, 27 + i * 23, 190, 19, status);
+    row.style.boxSizing = 'border-box';
+    row.style.padding = '3px 4px';
+    row.style.borderTop = i ? '1px solid rgba(97,67,38,.22)' : '0';
+    row.style.color = '#4c3120';
+    row.style.fontSize = '11px';
+    row.style.fontWeight = 'bold';
+    row.innerHTML = rows[i][0] + ':<span style="float:right">' + rows[i][1] + '</span>';
+  }
+}
+
+function drawUserFactionBoard(px, py, width) {
+  var player = getUserFactionBoardPlayer();
+  var hasFaction = player && player.faction != undefined && player.faction != F_NONE;
+  var image = player ? FACTION_BOARD_IMAGES[player.faction] : null;
+  var factionName = hasFaction ? getFactionName(player.getFaction()).toUpperCase() : 'CHOOSE A FACTION';
+  drawTileSectionHeader(px, py, width, 'YOUR FACTION BOARD · ' + factionName);
+
+  var boardPanel = makeSizedDiv(px, py + 23, width, 402, hudElement);
+  boardPanel.style.boxSizing = 'border-box';
+  boardPanel.style.border = '2px solid #624936';
+  boardPanel.style.borderRadius = '12px';
+  boardPanel.style.background = 'linear-gradient(145deg, rgba(255,248,225,.94), rgba(221,193,143,.90))';
+  boardPanel.style.boxShadow = '0 5px 12px rgba(55,39,24,.20), inset 0 0 0 1px rgba(255,255,255,.60)';
+
+  if(!image) {
+    var emptyBoard = makeSizedDiv(0, 0, width, 400, boardPanel);
+    emptyBoard.style.display = 'flex';
+    emptyBoard.style.alignItems = 'center';
+    emptyBoard.style.justifyContent = 'center';
+    emptyBoard.style.color = '#684625';
+    emptyBoard.style.fontFamily = 'Georgia, "Times New Roman", serif';
+    emptyBoard.style.fontSize = '18px';
+    emptyBoard.style.fontWeight = 'bold';
+    emptyBoard.innerHTML = hasFaction ?
+        factionName + ' is an expansion faction; this reference includes the 14 original factions.' :
+        'Choose your faction to reveal its board.';
+    return;
+  }
+
+  var boardImage = makeElement(boardPanel, 'img');
+  boardImage.src = image;
+  boardImage.alt = getFactionName(player.getFaction()) + ' faction board';
+  boardImage.title = getFactionName(player.getFaction()) + ' faction board';
+  boardImage.style.position = 'absolute';
+  boardImage.style.left = Math.floor((width - 600) / 2) + 'px';
+  boardImage.style.top = '7px';
+  boardImage.style.width = '600px';
+  boardImage.style.height = '386px';
+  boardImage.style.objectFit = 'contain';
+  boardImage.style.filter = 'drop-shadow(0 3px 4px rgba(55,39,24,.26))';
+  drawFactionBoardStatus(boardPanel, player);
+}
 
 //if onTileClick not null, added as onclick for the tile elements. Gets the tile as argument.
 function drawHud2(players, onTileClickMain) {
@@ -1761,17 +2005,22 @@ function drawHud2(players, onTileClickMain) {
   drawHumanUI(5, 660, state.showResourcesPlayer);
   drawCurrentRoundFocus(537, 755, 520);
 
+  // Keep the player's physical board directly above the public scoring
+  // reference, mirroring the order in which it is used during play.
+  drawUserFactionBoard(5, 840, GAMEPLAY_WIDTH - 10);
+
   // A single heading covers both related pieces; the final-scoring tile does
   // not repeat its own heading inside the section.
-  drawTileSectionHeader(5, 870, GAMEPLAY_WIDTH - 10, 'ROUND & FINAL SCORING');
-  drawTilesArray(5, 902, game.roundtiles, 450, 5, onTileClickMain);
-  drawFinalScoringTile(462, 902, game.finalscoring);
-  drawTileSectionHeader(5, 1005, GAMEPLAY_WIDTH - 10, 'AVAILABLE BONUS TILES');
-  drawTilesMap(5, 1036, game.bonustiles, GAMEPLAY_WIDTH - 12, 5, onTileClickMain);
-  drawTileSectionHeader(5, 1130, GAMEPLAY_WIDTH - 10, 'TOWN REWARDS');
-  drawTilesMap(5, 1171, game.towntiles, GAMEPLAY_WIDTH - 12, 5, onTileClickMain);
-  drawTileSectionHeader(5, 1255, GAMEPLAY_WIDTH - 10, 'FAVOR TILES');
-  drawFavorTilesGrid(5, 1280, game.favortiles, onTileClickMain);
+  drawTileSectionHeader(5, 1265, GAMEPLAY_WIDTH - 10, 'ROUND & FINAL SCORING');
+  drawTilesArray(5, 1297, game.roundtiles, 450, 5, onTileClickMain);
+  drawFinalScoringTile(462, 1297, game.finalscoring);
+  drawTileSectionHeader(5, 1400, GAMEPLAY_WIDTH - 10, 'AVAILABLE BONUS TILES');
+  drawTilesMap(5, 1431, game.bonustiles, GAMEPLAY_WIDTH - 12, 5, onTileClickMain);
+  drawTileSectionHeader(5, 1525, GAMEPLAY_WIDTH - 10, 'TOWN REWARDS');
+  drawTilesMap(5, 1566, game.towntiles, GAMEPLAY_WIDTH - 12, 5, onTileClickMain);
+  drawTileSectionHeader(5, 1650, GAMEPLAY_WIDTH - 10, 'FAVOR TILES');
+  drawFavorTilesGrid(5, 1675, game.favortiles, onTileClickMain);
+  drawClaimedTilesLedger(5, 1845, GAMEPLAY_WIDTH - 10, players);
 
   drawCultTracks(CULT_PANEL_LEFT + 7, TOP_PLAY_CONTENT_Y);
   if(state.type == S_GAME_OVER) drawEndGameScoring(ACTIONPANELX, ACTIONPANELY, 0 /*playerIndex*/);
@@ -1807,7 +2056,7 @@ function drawBoardWorkspaceSurfaces() {
   dashboardPanel.style.boxShadow = '0 5px 12px rgba(55,39,24,.18), inset 0 0 0 1px rgba(255,255,255,.55)';
   dashboardPanel.style.pointerEvents = 'none';
 
-  var supplyPanel = makeSizedDiv(0, 860, GAMEPLAY_WIDTH, 600, hudElement);
+  var supplyPanel = makeSizedDiv(0, 830, GAMEPLAY_WIDTH, 1050, hudElement);
   supplyPanel.style.boxSizing = 'border-box';
   supplyPanel.style.border = '2px solid #624936';
   supplyPanel.style.borderRadius = '12px';
@@ -2355,7 +2604,8 @@ function updateActionPlanSummary() {
   if(!actionPlanSummaryElement) return;
   // Older action helpers write directly into actionEl. If they do so after a
   // map click, they remove this summary's child controls; rebuild the visual
-  // shell before updating it so RUN TURN remains available for every path.
+  // shell before updating it so the automatic-turn status remains available
+  // for every path.
   if(!actionPlanTextElement || !actionPlanSummaryElement.contains(actionPlanTextElement) ||
       !actionPlanExecuteButton || !actionPlanSummaryElement.contains(actionPlanExecuteButton)) {
     if(state.type == S_ACTION && getCurrentPlayer() && getCurrentPlayer().human) {
@@ -2371,13 +2621,11 @@ function updateActionPlanSummary() {
   actionPlanExecuteButton.style.background = hasPlan ? 'linear-gradient(145deg, #53b978, #17643b)' : 'linear-gradient(145deg, #b99c67, #765d3e)';
   actionPlanExecuteButton.style.borderColor = hasPlan ? '#0f4b2b' : '#5a442d';
   actionPlanExecuteButton.style.boxShadow = hasPlan ? '0 3px 5px rgba(18,79,42,.42), inset 0 1px 1px rgba(255,255,255,.24)' : '0 2px 3px rgba(70,49,27,.28), inset 0 1px 1px rgba(255,255,255,.28)';
-  actionPlanExecuteButton.style.cursor = 'pointer';
+  actionPlanExecuteButton.style.cursor = 'default';
   actionPlanExecuteButton.style.opacity = '1';
-  actionPlanExecuteButton.innerHTML = 'RUN TURN';
-  actionPlanExecuteButton.title = hasPlan ? 'Run the planned action sequence (Enter on a keyboard).' : 'Choose an action before running the turn.';
-  actionPlanExecuteButton.onclick = hasPlan ? executeButtonFun : function() {
-    setHelp('Choose an action below, then tap RUN TURN to complete your turn.');
-  };
+  actionPlanExecuteButton.innerHTML = hasPlan ? 'AUTO-RUNNING' : 'AUTO-RUN';
+  actionPlanExecuteButton.title = hasPlan ? 'This action runs as soon as every required choice is complete.' : 'Actions run automatically after you make the required choices.';
+  actionPlanExecuteButton.onclick = null;
 
   actionPlanClearButton.style.opacity = hasPlan ? '1' : '.45';
   actionPlanClearButton.style.cursor = hasPlan ? 'pointer' : 'default';
@@ -3045,7 +3293,7 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
   passbutton.onclick = function() {
     prepareAction(new Action(A_PASS));
   };
-  passbutton.title = 'Pass for this round. Click on a chosen bonus tile after this, then press execute';
+  passbutton.title = 'Pass for this round, then click a bonus tile for the next round.';
 
 
   var execbutton = makeExecButton(player, px + 410, py + 100, parent, executeButtonFun, 'Execute the planned action sequence. Map, cult and tile choices are completed before execution.');

@@ -379,21 +379,19 @@ function renderPreScreen(px, py, standardButtonFun, randomButtonFun, beginnerBut
     ' Please note that having all bonus tiles selected or having none selected has the same effect: full randomness. </p><p>For all preset options,' +
     ' the game will resolve conflicts (such as choosing two factions of the same color or the same round tile twice) automatically with random selection.</p>' +
     '<h4>Performing Actions</h4>' +
-    '<p>The action usage may be a little confusing at first, but it works as follows: when it is your turn, you can perform an action sequence. That is, you\'re only allowed to do a single actual action,' +
-    ' but other minor actions such as burning power or converting power to coins can precede and follow the main action. Therefore, you always have to specify your complete action sequence first,' +
-    ' then press the Execute button. You only see the result of the action after pressing that button. If it is not allowed by the game rules, you will see the reason, and can retry with a new' +
-    ' action sequence. Depending on the action, you will be asked to click a hex on the map, click a favor tile to pick from, etc... The on screen instructions will tell each time what to do.</p>' +
+    '<p>When it is your turn, actions run automatically once every required choice is complete. For example, choose an action and then its map, cult, favor, or town target; the game submits it immediately.' +
+    ' Use Undo if you want to take it back. Depending on the action, the on-screen instructions will tell you what to choose next.</p>' +
     '<p>After doing an action, you can press Next to cycle through the AI\'s actions, or Fast to go through them faster.</p>' +
     '<p>To get the basic idea, here are some click sequences for typical actions:<br/>' +
-    ' -dig&build: click on a map tile. It will automatically do as many dig actions as needed to make the tile your color, and put a dwelling on it. Press Execute to actually perform it.<br/>' +
+    ' -dig&build: click on a map tile. It will automatically do as many dig actions as needed to make the tile your color, put a dwelling on it, and submit the action.<br/>' +
     ' -dig once: use the dig or dig&build button, but then before clicking on the map, first set the transform mode to "transform once"<br/>' +
-    ' -cult: click on a cult track, then press Execute to send a priest to 3 if available, otherwise 2 if available, otherwise 1<br/>' +
-    ' -upgr1: click a dwelling to upgrade to TP, or a TP to upgrade to SH, then press Execute<br/>' +
-    ' -upgr2: click a TP to upgrade to TE, or a TE to upgrade to SA, then press Execute<br/>' +
-    ' -forming a town: if any action results in a town, you must choose a town tile before pressing execute<br/>' +
+    ' -cult: click on a cult track to send a priest to 3 if available, otherwise 2 if available, otherwise 1<br/>' +
+    ' -upgr1: click a dwelling to upgrade to TP, or a TP to upgrade to SH<br/>' +
+    ' -upgr2: click a TP to upgrade to TE, or a TE to upgrade to SA<br/>' +
+    ' -forming a town: choose a town tile when prompted; the action then submits automatically<br/>' +
     '</p>' +
     '<h4>Other input</h4>' +
-    '<p>Apart from actions, sometimes you need to provide another type of input. For these, you usually don\'t need the "Execute" button. This is for the following types of input:<br/>' +
+    '<p>Apart from actions, sometimes you need to provide another type of input. This is for the following types of input:<br/>' +
     ' -Choosing initial faction: pick it from the popup<br/>' +
     ' -Placing initial dwelling: click on a map hex of your color<br/>' +
     ' -Choosing an initial bonus tile: click on a bonus tile, they are the parchment (very light yellow) colored ones<br/>' +
@@ -405,7 +403,7 @@ function renderPreScreen(px, py, standardButtonFun, randomButtonFun, beginnerBut
     '<h4>Darklings</h4>' +
     '<p>When upgrading to stronghold, it automatically adds the worker to priest conversion actions based on how many are left. If this was unwanted, use p->w to convert them back to workers.</p>' +
     '<h4>Mermaids</h4>' +
-    '<p>If you can form a mermaids water town, choose the "watertown" action before pressing execute, but after doing the action that ensures the right town size.</p>' +
+    '<p>If you can form a mermaids water town, choose the "watertown" action after doing the action that ensures the right town size.</p>' +
     '<h4>Shortcuts</h4>' +
     '<p>' +
     'Actions:<br/>' +

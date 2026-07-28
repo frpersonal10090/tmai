@@ -7,7 +7,7 @@ git switch level6
 git status
 node run_tests.js
 git add -A
-git commit -m "UI upgrade"
+git commit -m "add faction board images"
 git push origin level6
 
 # Publish the tested version to master / GitHub Pages

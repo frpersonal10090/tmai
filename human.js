@@ -131,6 +131,22 @@ function queueHumanState(state, helptext, fun) {
 
 var pactions = []; //your sequence of actions until you press "execute"
 
+// A completed action is submitted on the next event-loop turn.  Deferring by
+// one tick lets a single UI event add all of its follow-up choices first (for
+// example power spades followed by a map click), while independent clicks run
+// immediately.  Undo remains the normal way to correct a submitted action.
+var automaticExecutionPending = false;
+function scheduleAutomaticExecution() {
+  if(automaticExecutionPending || !executeButtonFun_ || state.type != S_ACTION) return;
+  automaticExecutionPending = true;
+  window.setTimeout(function() {
+    automaticExecutionPending = false;
+    if(state.type == S_ACTION && executeButtonFun_ && pactions.length > 0 && !humanStateBusy()) {
+      executeButtonFun();
+    }
+  }, 0);
+}
+
 function prepareAction(action) {
   if(state.type != S_ACTION) {
     return; //not supposed to do actions while gamestate is in another state
@@ -255,6 +271,9 @@ function prepareAction(action) {
         clearHumanState();
         tryPrepareAction(action);
       });
+    }
+    else {
+      scheduleAutomaticExecution();
     }
   }
 
@@ -847,9 +866,10 @@ Human.prototype.doRoundBonusSpade = function(playerIndex, callback) {
       if(i < result.length - 1) actionEl.innerHTML += ', ';
     }
     currentNum--;
+    if(currentNum <= 0) executeButtonFun();
   };
   digAndBuildMode = player.faction == F_GIANTS ? DBM_COLOR : DBM_ONE;
-  queueHumanState(HS_DIG, 'You got ' + num + '  bonus spades from the cult track. Click on map to dig, press execute when done.', fun);
+  queueHumanState(HS_DIG, 'You got ' + num + ' bonus spades from the cult track. Click each dig on the map; it submits after the last one.', fun);
 
   executeButtonFun_ = function() {
     var error = callback(playerIndex, result);
