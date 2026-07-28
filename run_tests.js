@@ -94,3 +94,37 @@ context.displayLog = function() {};
 context.beginGame();
 
 if(!context.runAllUnitTests()) process.exitCode = 1;
+
+// The benchmark has its own VM loader.  Exercise one complete mirrored pair so
+// regressions in the headless entry point are caught with the normal test run.
+var childProcess = require('child_process');
+var benchmarkResult = childProcess.spawnSync(process.execPath,
+    [path.join(__dirname, 'benchmark.js'), '--pairs', '1', '--seed', '12345', '--json'],
+    {encoding: 'utf8'});
+var benchmarkReplayResult = childProcess.spawnSync(process.execPath,
+    [path.join(__dirname, 'benchmark.js'), '--pairs', '1', '--seed', '12345', '--json'],
+    {encoding: 'utf8'});
+var benchmarkReport;
+var benchmarkReplayReport;
+try {
+  benchmarkReport = JSON.parse(benchmarkResult.stdout);
+  benchmarkReplayReport = JSON.parse(benchmarkReplayResult.stdout);
+} catch(error) {
+  console.error('Benchmark smoke test did not produce JSON: ' + benchmarkResult.stderr);
+  process.exitCode = 1;
+}
+if(benchmarkReport && benchmarkReplayReport) {
+  var stableScenarioDetail = function(report) {
+    return JSON.stringify(report.scenariosDetail, function(key, value) {
+      return key == 'runtimeMs' ? undefined : value;
+    });
+  };
+  var benchmarkSmokePassed = benchmarkResult.status === 0 &&
+      benchmarkReplayResult.status === 0 &&
+      benchmarkReport.scenarios === 1 && benchmarkReport.games === 2 &&
+      benchmarkReport.completedGames === 2 && benchmarkReport.crashes.length === 0 &&
+      benchmarkReport.equivalence.passed === 1 &&
+      stableScenarioDetail(benchmarkReport) == stableScenarioDetail(benchmarkReplayReport);
+  console.log('Benchmark smoke test: ' + (benchmarkSmokePassed ? 'passed' : 'failed'));
+  if(!benchmarkSmokePassed) process.exitCode = 1;
+}
