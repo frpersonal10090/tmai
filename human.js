@@ -94,12 +94,16 @@ function setHumanState(hstate, helptext, fun) {
   else if(hstate == HS_BONUS_TILE || hstate == HS_FAVOR_TILE || hstate == HS_TOWN_TILE) tileClickFun = fun;
   else if(hstate == HS_CULT) cultClickFun = fun;
   else if(hstate == HS_PRIEST_COLOR) Human.chooseColorDialog(state.currentPlayer, fun);
+  // Map-target feedback is rendered directly on the terrain sprites. Redraw
+  // when entering a map choice so the eligible hexes receive that treatment.
+  if(hstate == HS_MAP) drawMap();
   drawHud();
 }
 
 var onClearHumanState = []; //e.g. for queueHumanState
 
 function clearHumanState() {
+  var wasMapTargetSelection = humanstate == HS_MAP;
   humanstate = HS_MAIN;
   clearHelp();
   mapClickFun = null;
@@ -110,6 +114,9 @@ function clearHumanState() {
   // Choice modals belong to the paused human input state. Clear them before
   // the HUD redraw so a completed bonus, favor or town choice never lingers.
   popupElement.innerHTML = '';
+  // Remove direct terrain highlighting as soon as a map choice is complete
+  // or cancelled.
+  if(wasMapTargetSelection && game.players.length > 0) drawMap();
   if(game.players.length > 0) drawHud();
   // notify the clearHumanState listeners and clear onClearHumanState.
   var temp = onClearHumanState;
@@ -152,6 +159,17 @@ function toggleAutomaticExecution() {
 
 function scheduleAutomaticExecution() {
   if(!automaticExecutionEnabled || automaticExecutionPending || !executeButtonFun_ || state.type != S_ACTION) return;
+  // Resource conversions are supporting actions, not a complete turn. Keep
+  // that draft available for the normal board click that follows instead of
+  // immediately attempting (and failing) to submit it.
+  var hasTurnAction = false;
+  for(var i = 0; i < pactions.length; i++) {
+    if(isTurnAction(pactions[i])) {
+      hasTurnAction = true;
+      break;
+    }
+  }
+  if(!hasTurnAction) return;
   automaticExecutionPending = true;
   window.setTimeout(function() {
     automaticExecutionPending = false;
@@ -159,6 +177,16 @@ function scheduleAutomaticExecution() {
       executeButtonFun();
     }
   }, 0);
+}
+
+// The primary build interaction is a click on an empty terrain hex. The
+// sequence still needs explicit transform actions for the rules engine, so
+// compose those and the dwelling build into the current turn plan together.
+function prepareBuildDwellingAt(player, x, y) {
+  var tactions = getAutoTransformActions(player, x, y, player.getMainDigColor(),
+      getFreeSpades(player, pactions), 999);
+  for(var i = 0; i < tactions.length; i++) prepareAction(tactions[i]);
+  prepareAction(makeActionWithXY(A_BUILD, x, y));
 }
 
 function prepareAction(action) {
@@ -536,8 +564,10 @@ Human.prototype.chooseFaction = function(playerIndex, callback) {
   // Use the same decision dock as every other gameplay choice.
   resetGameplayPopupPosition();
   popupElement.innerHTML = '';
-  var panelW = 300;
-  var panelH = 38 + colors.length * 34;
+  // Give every faction its own readable card width. This is especially useful
+  // for the longer faction names, such as Chaos Magicians.
+  var panelW = 390;
+  var panelH = 48 + colors.length * 38;
   var factionDock = getGameplayPopupDock(panelW, panelH);
   factionChooserPosition.x = factionDock.x;
   factionChooserPosition.y = factionDock.y;
@@ -553,7 +583,7 @@ Human.prototype.chooseFaction = function(playerIndex, callback) {
   panel.style.boxShadow = '0 5px 14px rgba(29,18,9,.34), inset 0 0 0 1px rgba(255,255,255,.55)';
   panel.style.pointerEvents = 'none';
 
-  var title = makeText(13, 9, 'Choose a faction', chooserLayer);
+  var title = makeText(13, 12, 'Choose a faction', chooserLayer);
   title.style.fontFamily = 'Georgia, serif';
   title.style.fontWeight = 'bold';
   title.style.fontSize = '17px';
@@ -609,8 +639,8 @@ Human.prototype.chooseFaction = function(playerIndex, callback) {
   for(var g = 0; g < colors.length; g++) {
     var groupColor = colors[g];
     var groupX = 9;
-    var groupY = 34 + g * 34;
-    var group = makeSizedDiv(groupX, groupY, 282, 28, chooserLayer);
+    var groupY = 42 + g * 38;
+    var group = makeSizedDiv(groupX, groupY, 372, 32, chooserLayer);
     group.style.boxSizing = 'border-box';
     group.style.background = 'rgba(255, 252, 240, 0.74)';
     group.style.border = '1px solid #9c7750';
@@ -619,9 +649,9 @@ Human.prototype.chooseFaction = function(playerIndex, callback) {
     group.style.overflow = 'hidden';
     group.style.zIndex = 2002;
 
-    var groupHeader = makeSizedDiv(groupX, groupY, 76, 28, chooserLayer);
+    var groupHeader = makeSizedDiv(groupX, groupY, 88, 32, chooserLayer);
     groupHeader.style.boxSizing = 'border-box';
-    groupHeader.style.padding = '6px 5px';
+    groupHeader.style.padding = '8px 5px';
     groupHeader.style.background = getImageColor(groupColor);
     groupHeader.style.borderRadius = '5px 0 0 5px';
     groupHeader.style.color = getHighContrastColor(getImageColor(groupColor));
@@ -630,13 +660,14 @@ Human.prototype.chooseFaction = function(playerIndex, callback) {
     groupHeader.style.letterSpacing = '0.3px';
     groupHeader.style.textAlign = 'center';
     groupHeader.style.zIndex = 2003;
-    groupHeader.innerHTML = groupColor == X ? 'VARIABLE' : getColorName(groupColor).toUpperCase();
+    groupHeader.innerHTML = groupColor == X ? 'VARIABLE' :
+        groupColor == W ? 'ICE' : groupColor == O ? 'FIRE' : getColorName(groupColor).toUpperCase();
 
     for(var f = 0; f < grouped[groupColor].length; f++) {
       var faction = grouped[groupColor][f];
-      var card = makeSizedDiv(groupX + 81 + f * 98, groupY + 3, 94, 22, chooserLayer);
+      var card = makeSizedDiv(groupX + 93 + f * 139, groupY + 3, 135, 26, chooserLayer);
       card.style.boxSizing = 'border-box';
-      card.style.padding = '4px 3px';
+      card.style.padding = '5px 4px';
       card.style.background = '#fffaf0';
       card.style.border = '1px solid #b99567';
       card.style.borderRadius = '4px';
@@ -644,9 +675,9 @@ Human.prototype.chooseFaction = function(playerIndex, callback) {
       card.style.color = '#3e2818';
       card.style.cursor = 'pointer';
       card.style.fontFamily = 'Georgia, serif';
-      card.style.fontSize = '10px';
+      card.style.fontSize = '11px';
       card.style.fontWeight = 'bold';
-      card.style.lineHeight = '11px';
+      card.style.lineHeight = '14px';
       card.style.textAlign = 'center';
       card.style.zIndex = 2003;
       card.innerHTML = getFactionName(faction);
@@ -1004,9 +1035,7 @@ function digAndBuildFun(initialMode, helpText) {
         for(var i = 0; i < tactions.length; i++) prepareAction(tactions[i]);
       }
       if(digAndBuildMode == DBM_BUILD) {
-        var action = new Action(A_BUILD);
-        action.co = [x, y];
-        prepareAction(action);
+        prepareAction(makeActionWithXY(A_BUILD, x, y));
       }
     } else {
       // single dig where player chooses particular direction (e.g. anti-dig)

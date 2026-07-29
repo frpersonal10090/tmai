@@ -40,8 +40,8 @@ function beginGame() {
   game.btoggle = false;
   clearHumanState();
 
-  fastestMode = false;
-  fastMode = false;
+  fastestMode = true;
+  fastMode = true;
   autoLeech = false;
   autoLeech1 = false;
   autoLeechNo = false;

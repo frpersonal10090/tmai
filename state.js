@@ -114,8 +114,10 @@ var nextButtonFun = null; //for shortcut
 var fastButtonFun = null; //for shortcut
 var fastestButtonFun = null; //for shortcut
 
-var fastMode = false;
-var fastestMode = false;
+// New games default to automatic turn progression. Players can switch this
+// to Fast or Manual from Game Settings at any time.
+var fastMode = true;
+var fastestMode = true;
 var nscount = 0;
 var nsfuncount = 0;
 var showingNextButtonPanel = false;

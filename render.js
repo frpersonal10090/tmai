@@ -30,7 +30,9 @@ var BOARD_MAP_WIDTH = 860;
 var BOARD_MAP_HEIGHT = 462;
 var CULT_PANEL_LEFT = BOARD_MAP_LEFT + BOARD_MAP_WIDTH + 10;
 var GAMEPLAY_WIDTH = CULT_PANEL_LEFT + 255;
-var TOP_PLAY_CONTENT_Y = 50;
+// Leave a clear gutter below the header, including its drop shadow, before
+// the map and its surrounding panels begin.
+var TOP_PLAY_CONTENT_Y = 60;
 var mapElement = makeSizedDiv(BOARD_MAP_LEFT, TOP_PLAY_CONTENT_Y, BOARD_MAP_WIDTH, BOARD_MAP_HEIGHT, document.body);
 document.body.appendChild(mapElement);
 
@@ -246,8 +248,12 @@ function drawTileMapElementOnGrid(x, y, tilex, tiley, parent) {
   return drawTileMapElement(px, py, tilex, tiley, parent);
 }
 
-function drawHexagon(x, y, color) {
-  return drawTileMapElementOnGrid(x, y, 0, color - I, mapElement);
+function drawHexagon(x, y, color, highlighted) {
+  var hex = drawTileMapElementOnGrid(x, y, 0, color - I, mapElement);
+  // Apply the highlight to the terrain sprite itself. This keeps it perfectly
+  // aligned with the map and leaves any building sprite above it unchanged.
+  if(highlighted) hex.style.filter = 'brightness(1.25)';
+  return hex;
 }
 
 
@@ -419,10 +425,14 @@ function styleMapWorkspace(active) {
 function drawMap() {
   styleMapWorkspace(true);
   mapElement.style.left = BOARD_MAP_LEFT + 'px';
+  var currentPlayer = getCurrentPlayer();
   var drawMapTile = function(x, y) {
     var tile = getWorld(x, y);
     if(tile != N) {
-      drawHexagon(x, y, tile);
+      var highlighted = humanstate == HS_MAP &&
+          ((state.type == S_INIT_DWELLING && isInitialDwellingTarget(currentPlayer, x, y)) ||
+           (state.type != S_INIT_DWELLING && mapActionTargetFun && mapActionTargetFun(x, y)));
+      drawHexagon(x, y, tile, highlighted);
       if(tile != I) {
         if(altco) drawGridSymbol(x, y, x + ',' + y);
         else if(showBoardCoordinates) drawGridSymbol(x, y, printCo(x, y));
@@ -1289,30 +1299,41 @@ function renderRoundTile(px, py, tile, details, index, scale, parent) {
   inner.style.border = '1px solid rgba(238,224,180,.48)';
   inner.style.pointerEvents = 'none';
 
-  drawTileIcon(drawX + 7, drawY + 6, details.trigger, drawParent, false);
+  // Each reward row has a fixed central arrow. The two result areas are then
+  // equal, so their content remains balanced even when the icon widths differ.
+  var tileInnerX = drawX + 4;
+  var tileInnerRight = tileInnerX + 62;
+  var arrowWidth = 8;
+  var tileArrowX = tileInnerX + Math.round((62 - arrowWidth) / 2);
+  var leftZoneCenter = tileInnerX + (tileArrowX - tileInnerX) / 2;
+  var rightZoneCenter = tileArrowX + arrowWidth + (tileInnerRight - (tileArrowX + arrowWidth)) / 2;
+
+  drawTileIcon(Math.round(leftZoneCenter - 17 / 2), drawY + 6, details.trigger, drawParent, false);
   if(details.triggerLabel) {
     var triggerLabel = makeSizedDiv(drawX + 4, drawY + 21, 24, 7, drawParent);
     styleBonusTileText(triggerLabel, 5, 'bold', '#f5ecd1');
     triggerLabel.innerHTML = details.triggerLabel;
   }
-  drawTileArrow(drawX + 29, drawY + 9, drawParent);
-  drawVPBadge(drawX + 43, drawY + 6, details.vp, drawParent);
+  drawTileArrow(tileArrowX, drawY + 9, drawParent);
+  drawVPBadge(Math.round(rightZoneCenter - 19 / 2), drawY + 6, details.vp, drawParent);
 
   var divider = makeSizedDiv(drawX + 6, drawY + 29, 58, 1, drawParent);
   divider.style.background = 'rgba(238,224,180,.58)';
   divider.style.fontSize = '0%';
 
   if(details.cult == 'priest') {
-    drawTileIcon(drawX + 8, drawY + 35, 'priest', drawParent, true);
-    var priestLabel = makeSizedDiv(drawX + 20, drawY + 38, 13, 8, drawParent);
+    // Treat the priest and multiplier as one compact group centered in the
+    // left result area.
+    drawTileIcon(Math.round(leftZoneCenter - 9), drawY + 35, 'priest', drawParent, true);
+    var priestLabel = makeSizedDiv(Math.round(leftZoneCenter + 2), drawY + 38, 7, 8, drawParent);
     styleBonusTileText(priestLabel, 7, 'bold', '#f6efd9');
-    priestLabel.style.textAlign = 'left';
+    priestLabel.style.textAlign = 'center';
     priestLabel.innerHTML = '×';
   } else {
-    drawCultRequirement(drawX + 7, drawY + 34, details.cult, details.threshold, drawParent);
+    drawCultRequirement(Math.round(leftZoneCenter - 14 / 2), drawY + 34, details.cult, details.threshold, drawParent);
   }
-  drawTileArrow(drawX + 35, drawY + 36, drawParent);
-  drawTileReward(drawX + 47, drawY + 34, details.reward, drawParent);
+  drawTileArrow(tileArrowX, drawY + 36, drawParent);
+  drawTileReward(Math.round(rightZoneCenter - 12 / 2), drawY + 34, details.reward, drawParent);
 
   var roundLabel = makeSizedDiv(drawX + 2, drawY - 12, 66, 10, drawParent);
   styleBonusTileText(roundLabel, 8, 'bold', '#493f38');
@@ -1423,7 +1444,7 @@ function drawOwnedTileMini(parent, px, py, tile, scale, amount) {
 }
 
 function drawClaimedTilesLedger(px, py, width, players) {
-  drawTileSectionHeader(px, py, width, 'TILES HELD BY PLAYERS');
+  drawTileSectionHeader(px, py, width, 'TILES HELD BY OTHER PLAYERS');
   var gap = 6;
   var cardWidth = Math.floor((width - gap * (players.length - 1)) / players.length);
   for(var i = 0; i < players.length; i++) {
@@ -1525,7 +1546,7 @@ function renderFinalScoringTile(px, py, text1, text2, text3, text4, text5, text6
   width = width || 120;
   height = height || 70;
   parent = parent || hudElement;
-  var prominent = height > 90;
+  var prominent = height > 110;
   var el = makeSizedDiv(px, py, width, height, parent);
   el.style.boxSizing = 'border-box';
   el.style.border = '2px solid #5b432d';
@@ -1655,29 +1676,30 @@ function drawPlayerDashboardToken(px, py, icon, text, labelWidth) {
   label.innerHTML = text;
 }
 
-function drawHumanColorWheel() {
-  var human = null;
-  for(var i = 0; i < game.players.length; i++) {
-    if(game.players[i].human) { human = game.players[i]; break; }
-  }
-  if(!human || human.woodcolor < CIRCLE_BEGIN || human.woodcolor > CIRCLE_END) return;
-
-  var wheel = makeSizedDiv(505, 3, 178, 29, hudElement);
-  wheel.style.zIndex = 101;
+// A fixed terrain reference belongs beside the action and status controls,
+// rather than in the global header. It deliberately shows no player-specific
+// state: every terrain colour has the same treatment.
+function drawTerrainColorWheel(px, py, width, height, parent) {
+  var wheel = makeSizedDiv(px, py, width, height, parent);
   wheel.style.pointerEvents = 'none';
-  wheel.title = 'Terrain color wheel. Your terrain color is outlined.';
 
-  var centerX = 89;
-  var centerY = 14;
+  // Use the entire available right-hand column. The ring is sized from its
+  // smaller dimension so it stays round if the column is ever resized.
+  var size = Math.min(width, height);
+  var pipSize = Math.round(size * .24);
+  var radius = Math.round((size - pipSize) / 2) - 2;
+  var centerX = Math.round(width / 2);
+  var centerY = Math.round(height / 2);
   for(var color = CIRCLE_BEGIN; color <= CIRCLE_END; color++) {
     var offset = color - CIRCLE_BEGIN;
     var angle = -Math.PI / 2 + offset * 2 * Math.PI / 7;
-    var pip = makeSizedDiv(centerX + Math.round(Math.cos(angle) * 12) - 6, centerY + Math.round(Math.sin(angle) * 12) - 6, 12, 12, wheel);
+    var pip = makeSizedDiv(centerX + Math.round(Math.cos(angle) * radius) - Math.round(pipSize / 2),
+        centerY + Math.round(Math.sin(angle) * radius) - Math.round(pipSize / 2), pipSize, pipSize, wheel);
     pip.style.boxSizing = 'border-box';
-    pip.style.border = (color == human.woodcolor ? '2px solid #f7df8a' : '1px solid #4d3523');
+    pip.style.border = '1px solid #4d3523';
     pip.style.borderRadius = '50%';
     pip.style.background = getImageColor(color);
-    pip.style.boxShadow = (color == human.woodcolor ? '0 0 0 1px #57391f, 0 1px 2px rgba(47,29,16,.42)' : 'inset 0 1px 1px rgba(255,255,255,.55), 0 1px 1px rgba(46,29,17,.28)');
+    pip.style.boxShadow = 'inset 0 1px 1px rgba(255,255,255,.55), 0 1px 1px rgba(46,29,17,.28)';
   }
 }
 
@@ -1896,13 +1918,15 @@ function drawPlayerPanel(px, py, player, scoreProjection, compactWidth) {
 
 // The public scoring strip is the first thing below the board. Actions follow,
 // then the active player's faction board and the other faction cards.
-var ROUND_SCORING_TOP = 530;
-var ACTIONS_TOP = 760;
-var USER_FACTION_BOARD_TOP = 930;
-var PLAYER_PANEL_TOP = 1390;
+var ROUND_SCORING_TOP = 540;
+var ROUND_SCORING_PANEL_HEIGHT = 178;
+var ACTIONS_TOP = 730;
+var USER_FACTION_BOARD_TOP = 900;
+var USER_FACTION_BOARD_HEIGHT = 540;
+var PLAYER_PANEL_TOP = USER_FACTION_BOARD_TOP + 23 + USER_FACTION_BOARD_HEIGHT + 35;
 var PLAYER_PANEL_HEIGHT = 112;
-var SUPPLY_TOP = 1530;
-var GAMEPLAY_BOTTOM = 2175;
+var SUPPLY_TOP = PLAYER_PANEL_TOP + 142;
+var GAMEPLAY_BOTTOM = SUPPLY_TOP + 645;
 
 // Base-game faction boards, sourced from the individual faction pages linked
 // by Gaming Strategy. Keep this map keyed by the game constants so factions
@@ -1935,9 +1959,9 @@ function drawUserFactionBoard(px, py, width) {
   var hasFaction = player && player.faction != undefined && player.faction != F_NONE;
   var image = player ? FACTION_BOARD_IMAGES[player.faction] : null;
   var factionName = hasFaction ? getFactionName(player.getFaction()).toUpperCase() : 'CHOOSE A FACTION';
-  drawTileSectionHeader(px, py, width, 'YOUR FACTION BOARD · ' + factionName);
+  drawTileSectionHeader(px, py, width, 'MY FACTION BOARD · ' + factionName);
 
-  var boardPanel = makeSizedDiv(px, py + 23, width, 402, hudElement);
+  var boardPanel = makeSizedDiv(px, py + 23, width, USER_FACTION_BOARD_HEIGHT, hudElement);
   boardPanel.style.boxSizing = 'border-box';
   boardPanel.style.border = '2px solid #624936';
   boardPanel.style.borderRadius = '12px';
@@ -1945,7 +1969,7 @@ function drawUserFactionBoard(px, py, width) {
   boardPanel.style.boxShadow = '0 5px 12px rgba(55,39,24,.20), inset 0 0 0 1px rgba(255,255,255,.60)';
 
   if(!image) {
-    var emptyBoard = makeSizedDiv(0, 0, width, 400, boardPanel);
+    var emptyBoard = makeSizedDiv(0, 0, width, USER_FACTION_BOARD_HEIGHT, boardPanel);
     emptyBoard.style.display = 'flex';
     emptyBoard.style.alignItems = 'center';
     emptyBoard.style.justifyContent = 'center';
@@ -1971,28 +1995,108 @@ function drawUserFactionBoard(px, py, width) {
   boardImage.style.objectFit = 'contain';
   boardImage.style.filter = 'drop-shadow(0 3px 4px rgba(55,39,24,.26))';
 
-  // The actual player card contains this same state plus resources, VP, and
-  // income, so keeping it beside the board is clearer than a second summary.
+  // The player card stays over the board so its fixed 260px width does not
+  // compete with the fixed-size faction-board image.
   drawCompactPlayerPanel(px + 24, py + 68, 260, player);
+
+  // Claimed tiles belong with the human player's faction board, not in the
+  // shared player ledger. Favor tiles get the flexible middle rail: it holds
+  // all twelve possible tiles in one row, while the fixed bonus and at-most
+  // four town tiles anchor the two sides.
+  var tilesPanel = makeSizedDiv(12, 402, width - 24, 126, boardPanel);
+  tilesPanel.style.boxSizing = 'border-box';
+  tilesPanel.style.border = '1px solid rgba(101,70,40,.62)';
+  tilesPanel.style.borderRadius = '8px';
+  tilesPanel.style.background = 'linear-gradient(145deg, rgba(255,250,232,.92), rgba(222,192,135,.76))';
+  tilesPanel.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,.72)';
+
+  function tileLabel(x, label) {
+    var el = makeText(x, 8, label, tilesPanel);
+    el.style.color = '#63472d';
+    el.style.fontSize = '8px';
+    el.style.fontWeight = 'bold';
+    el.style.letterSpacing = '.4px';
+  }
+
+  var tilesWidth = width - 24;
+  var bonusX = 12;
+  var favorX = 86;
+  var townX = tilesWidth - 228;
+  tileLabel(bonusX, 'BONUS TILE');
+  tileLabel(favorX, 'FAVOR TILES');
+  tileLabel(townX, 'TOWN TILES');
+
+  if(player.bonustile != T_NONE) drawOwnedTileMini(tilesPanel, bonusX + 8, 30, player.bonustile, .82, 1);
+  else {
+    var noBonus = makeText(bonusX + 4, 48, 'none', tilesPanel);
+    noBonus.style.color = '#94755a';
+    noBonus.style.fontSize = '9px';
+  }
+
+  var ownedFavors = [];
+  for(var favor = T_FAV_BEGIN + 1; favor < T_FAV_END; favor++) {
+    var favorAmount = player.favortiles[favor] || 0;
+    if(favorAmount) ownedFavors.push({tile: favor, amount: favorAmount});
+  }
+  if(!ownedFavors.length) {
+    var noFavor = makeText(favorX, 48, 'none yet', tilesPanel);
+    noFavor.style.color = '#94755a';
+    noFavor.style.fontSize = '9px';
+  } else {
+    // Spread a small collection out for easy scanning, then naturally tighten
+    // it to fit when a player owns eight, ten, or even every favor tile.
+    var favorSpace = townX - favorX - 16;
+    var favorStep = ownedFavors.length == 1 ? 0 :
+        Math.floor((favorSpace - 60) / (ownedFavors.length - 1));
+    for(var favorIndex = 0; favorIndex < ownedFavors.length; favorIndex++) {
+      var ownedFavor = ownedFavors[favorIndex];
+      drawOwnedTileMini(tilesPanel, favorX + favorIndex * favorStep, 32,
+          ownedFavor.tile, .82, ownedFavor.amount);
+    }
+  }
+
+  var ownedTowns = [];
+  for(var town = T_TW_BEGIN + 1; town < T_TW_END; town++) {
+    var townAmount = player.towntiles[town] || 0;
+    if(townAmount) ownedTowns.push({tile: town, amount: townAmount});
+  }
+  if(!ownedTowns.length) {
+    var noTown = makeText(townX, 48, 'none yet', tilesPanel);
+    noTown.style.color = '#94755a';
+    noTown.style.fontSize = '9px';
+  } else {
+    // Four town rewards are the rules maximum. A second compact row is still
+    // available for imported or debug states that contain more.
+    var townScale = ownedTowns.length > 4 ? .75 : .86;
+    for(var townIndex = 0; townIndex < ownedTowns.length; townIndex++) {
+      var ownedTown = ownedTowns[townIndex];
+      drawOwnedTileMini(tilesPanel, townX + (townIndex % 4) * 54,
+          ownedTowns.length > 4 ? 30 + Math.floor(townIndex / 4) * 48 : 34,
+          ownedTown.tile, townScale, ownedTown.amount);
+    }
+  }
 }
 
-// Six round tiles plus final scoring occupy seven equal columns. This makes
-// scoring a full-width part of the play surface rather than a small reference
-// shelf, while preserving the current-round highlight on its tile.
+// Six round tiles plus final scoring occupy seven equal columns. The compact
+// tiles are centered within those columns so the strip stays full width
+// without becoming visually taller than the board workspace above it.
 function drawRoundScoringStrip(px, py, width) {
   var gap = 8;
-  var tileWidth = Math.floor((width - gap * 6) / 7);
-  var tileScale = tileWidth / 70;
+  var columnWidth = Math.floor((width - gap * 6) / 7);
+  var tileScale = Math.min(1.7, columnWidth / 70);
+  var tileWidth = Math.round(70 * tileScale);
   var tileHeight = Math.round(60 * tileScale);
-  var tileY = py + 50;
+  var tileY = py + 40;
 
   drawTileSectionHeader(px, py, width, 'ROUND & FINAL SCORING · CURRENT ROUND ' + state.round + ' / 6');
   // Round tiles are stored with an unused zero slot so their indices match
   // the game's 1–6 round numbers. Lay those six real tiles into columns 0–5.
   for(var i = 1; i < game.roundtiles.length; i++) {
-    drawRoundTile(px + (i - 1) * (tileWidth + gap), tileY, game.roundtiles[i], i, tileScale);
+    var tileX = px + (i - 1) * (columnWidth + gap) + Math.round((columnWidth - tileWidth) / 2);
+    drawRoundTile(tileX, tileY, game.roundtiles[i], i, tileScale);
   }
-  drawFinalScoringTile(px + 6 * (tileWidth + gap), tileY, game.finalscoring, tileWidth, tileHeight);
+  var finalTileX = px + 6 * (columnWidth + gap) + Math.round((columnWidth - tileWidth) / 2);
+  drawFinalScoringTile(finalTileX, tileY, game.finalscoring, tileWidth, tileHeight);
   return tileY + tileHeight - py;
 }
 
@@ -2001,7 +2105,6 @@ function drawHud2(players, onTileClickMain) {
   hudElement.innerHTML = '';
   drawBoardWorkspaceSurfaces();
   drawPowerActionRail();
-  drawHumanColorWheel();
   var scoreProjection;
   if(state.round == 6) scoreProjection = projectEndGameScores();
   var factionCards = [];
@@ -2030,7 +2133,7 @@ function drawHud2(players, onTileClickMain) {
   drawTilesMap(5, SUPPLY_TOP + 166, game.towntiles, GAMEPLAY_WIDTH - 12, 5, onTileClickMain);
   drawTileSectionHeader(5, SUPPLY_TOP + 250, GAMEPLAY_WIDTH - 10, 'FAVOR TILES');
   drawFavorTilesGrid(5, SUPPLY_TOP + 275, game.favortiles, onTileClickMain);
-  drawClaimedTilesLedger(5, SUPPLY_TOP + 445, GAMEPLAY_WIDTH - 10, players);
+  if(factionCards.length) drawClaimedTilesLedger(5, SUPPLY_TOP + 445, GAMEPLAY_WIDTH - 10, factionCards);
 
   drawCultTracks(CULT_PANEL_LEFT + 7, TOP_PLAY_CONTENT_Y);
   if(state.type == S_GAME_OVER) drawEndGameScoring(ACTIONPANELX, ACTIONPANELY, 0 /*playerIndex*/);
@@ -2041,7 +2144,8 @@ function drawHud2(players, onTileClickMain) {
 // These surfaces sit only in the open areas around the board, so they never
 // interfere with existing map click targets.
 function drawBoardWorkspaceSurfaces() {
-  var powerPanel = makeSizedDiv(3, 43, 82, 474, hudElement);
+  var boardWorkspaceTop = TOP_PLAY_CONTENT_Y - 7;
+  var powerPanel = makeSizedDiv(3, boardWorkspaceTop, 82, 474, hudElement);
   powerPanel.style.boxSizing = 'border-box';
   powerPanel.style.border = '2px solid #47335d';
   powerPanel.style.borderRadius = '12px';
@@ -2050,7 +2154,7 @@ function drawBoardWorkspaceSurfaces() {
   powerPanel.style.pointerEvents = 'none';
 
   var cultPanelX = CULT_PANEL_LEFT;
-  var cultPanel = makeSizedDiv(cultPanelX, 43, 255, 474, hudElement);
+  var cultPanel = makeSizedDiv(cultPanelX, boardWorkspaceTop, 255, 474, hudElement);
   cultPanel.style.boxSizing = 'border-box';
   cultPanel.style.border = '2px solid #624936';
   cultPanel.style.borderRadius = '12px';
@@ -2058,7 +2162,7 @@ function drawBoardWorkspaceSurfaces() {
   cultPanel.style.boxShadow = '0 6px 14px rgba(55,39,24,.24), inset 0 0 0 1px rgba(255,255,255,.55)';
   cultPanel.style.pointerEvents = 'none';
 
-  var scoringPanel = makeSizedDiv(0, 520, GAMEPLAY_WIDTH, 218, hudElement);
+  var scoringPanel = makeSizedDiv(0, ROUND_SCORING_TOP - 10, GAMEPLAY_WIDTH, ROUND_SCORING_PANEL_HEIGHT, hudElement);
   scoringPanel.style.boxSizing = 'border-box';
   scoringPanel.style.border = '2px solid #624936';
   scoringPanel.style.borderRadius = '12px';
@@ -2395,15 +2499,17 @@ function drawHumanUI(px, py, playerIndex) {
   ACTIONPANELH = showingNextButtonPanel ? 150 :
       (humanstate == HS_DIG ? 180 : 150);
   var bg = makeSizedDiv(ACTIONPANELX, ACTIONPANELY, ACTIONPANELW, ACTIONPANELH, parent).style.border = '1px solid black';
+  var actionStatusX = px + ACTIONPANELW + 12;
+  var actionStatusWidth = 520;
 
   // actionEl is a persistent root created with the old side-by-side layout.
   // Anchor the turn plan in the current action row before it is rendered.
-  actionEl.style.left = (px + ACTIONPANELW + 12) + 'px';
+  actionEl.style.left = actionStatusX + 'px';
   actionEl.style.top = (py - 5) + 'px';
-  helpEl.style.left = (px + ACTIONPANELW + 12) + 'px';
+  helpEl.style.left = actionStatusX + 'px';
   helpEl.style.top = (py + 52) + 'px';
   helpEl.style.boxSizing = 'border-box';
-  helpEl.style.width = '520px';
+  helpEl.style.width = actionStatusWidth + 'px';
   helpEl.style.minHeight = '38px';
   helpEl.style.padding = '11px 10px 7px';
   helpEl.style.background = 'linear-gradient(145deg, #fff8e5, #e6c98e)';
@@ -2413,6 +2519,13 @@ function drawHumanUI(px, py, playerIndex) {
   helpEl.style.color = '#563920';
   helpEl.style.fontSize = '10px';
   helpEl.style.zIndex = 100;
+
+  // The terrain wheel is the full third column of this action/status band.
+  // Together, the action controls, status controls, and wheel now run to the
+  // same right edge as the scoring and faction-board rows.
+  var terrainWheelX = actionStatusX + actionStatusWidth + 8;
+  var terrainWheelWidth = GAMEPLAY_WIDTH - terrainWheelX - 5;
+  drawTerrainColorWheel(terrainWheelX, py - 5, terrainWheelWidth, ACTIONPANELH, parent);
 
   if(state.type == S_ACTION && player.human) drawActionPlanSummary(player);
   else {
@@ -2480,12 +2593,10 @@ function drawHumanUI(px, py, playerIndex) {
       drawIcon(cx, cy, 0, player.auxcolor, parent);
       drawIcon(cx, cy, B_D, player.woodcolor, parent);
       setHelp('Choose a highlighted ' + getColorName(player.auxcolor) + ' terrain space. Only highlighted spaces are selectable for your starting dwelling.');
-      drawInitialDwellingTargetHints(player, parent);
     }
     else if(humanstate == HS_DIG) {
-      var ptype = pactions.length > 0 ? pactions[pactions.length - 1].type : A_NONE; //previous action type
-
-      makeText(px + 8, py + 4, 'Choose how to use your available spade(s).', parent).style.fontWeight = 'bold';
+      makeText(px + 8, py + 4, 'Click terrain to ' + (digAndBuildMode == DBM_BUILD ?
+          'build a dwelling (digging is added automatically).' : 'dig it toward your terrain color.'), parent).style.fontWeight = 'bold';
       var makeDigChoice = function(x, y, label, active, click, title) {
         var choice = makeSizedDiv(x, y, 150, 31, parent);
         choice.style.boxSizing = 'border-box';
@@ -2507,35 +2618,25 @@ function drawHumanUI(px, py, playerIndex) {
       };
 
       if(state.type != S_ROUND_END_DIG) {
-        makeDigChoice(px + 8, py + 27, 'Transform & build', digAndBuildMode == DBM_BUILD,
+        makeDigChoice(px + 8, py + 27, 'Build a dwelling', digAndBuildMode == DBM_BUILD,
             function() { digAndBuildMode = DBM_BUILD; drawHud(); },
             'Build a dwelling. First transforms the landscape to your color if needed.');
       }
 
       if(state.type != S_ROUND_END_DIG || player.faction == F_GIANTS) {
-        makeDigChoice(px + 172, py + 27, 'Transform full', digAndBuildMode == DBM_COLOR,
+        makeDigChoice(px + 172, py + 27, 'Dig', digAndBuildMode == DBM_COLOR,
             function() { digAndBuildMode = DBM_COLOR; drawHud(); },
             'Transforms the landscape to your color.');
       }
 
-      if(player.faction != F_GIANTS && ptype != A_SANDSTORM && player.color != O) {
-        makeDigChoice(px + 8, py + 68, 'Transform once', digAndBuildMode == DBM_ONE,
-            function() { digAndBuildMode = DBM_ONE; drawHud(); },
-            'Transforms the landscape one step towards your color.');
-        makeDigChoice(px + 172, py + 68, 'Anti-transform', digAndBuildMode == DBM_ANTI,
-            function() { digAndBuildMode = DBM_ANTI; drawHud(); },
-            'Transforms the landscape in the opposite direction.');
-      }
-
       if(state.type != S_ROUND_END_DIG) {
-        makeDigChoice(px + 8, py + 109, 'Cancel', false, function() { clearHumanState(); }, 'Cancel digging.');
+        makeDigChoice(px + 8, py + 68, 'Cancel', false, function() { clearHumanState(); }, 'Cancel digging.');
       } else {
-        makeExecButton(player, px + 410, py + 109, parent, executeButtonFun, 'Execute round bonus digs.');
+        makeExecButton(player, px + 410, py + 68, parent, executeButtonFun, 'Execute round bonus digs.');
       }
     }
     else if(humanstate == HS_MAP) {
       drawIcon(cx, cy, 0, player.woodcolor, parent);
-      drawActionMapTargetHints(parent);
       var button = makeLinkButton(px, py + 38, 'Cancel map action', parent);
       button.onclick = clearHumanState;
       styleActionFlowControl(button, 'quiet');
@@ -2563,54 +2664,6 @@ function drawHumanUI(px, py, playerIndex) {
   // The faction-dashboard row already carries every player's resources,
   // buildings, advances and next income. Keeping the legacy local summary
   // here would duplicate that information and dilute the action area.
-}
-
-// A setup-only overlay that makes legal starting locations immediately
-// discoverable. It does not handle clicks; the normal map overlay below still
-// invokes the rules-backed human callback.
-function drawMapTargetMarker(co, parent, borderColor, glowColor) {
-  // Match drawTileMapElement exactly: target feedback must share the sprite's
-  // bounding box, not an approximated centre point.
-  var markerLeft = parseInt(mapElement.style.left) + co[0] - 32;
-  var markerTop = parseInt(mapElement.style.top) + co[1] - 64 / 3;
-  var marker = makeSizedDiv(markerLeft, markerTop, 64, 64, parent);
-  marker.style.boxSizing = 'border-box';
-  marker.style.border = '2px solid ' + borderColor;
-  marker.style.borderRadius = '4px';
-  marker.style.background = 'rgba(255,255,255,.04)';
-  marker.style.boxShadow = '0 0 0 1px rgba(61,44,27,.38), 0 0 8px ' + glowColor;
-  marker.style.clipPath = 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)';
-  marker.style.pointerEvents = 'none';
-
-  var dot = makeSizedDiv(markerLeft + 29, markerTop + 29, 6, 6, parent);
-  dot.style.boxSizing = 'border-box';
-  dot.style.border = '1px solid rgba(61,44,27,.62)';
-  dot.style.borderRadius = '50%';
-  dot.style.background = borderColor;
-  dot.style.boxShadow = '0 0 5px ' + glowColor;
-  dot.style.pointerEvents = 'none';
-}
-
-function drawInitialDwellingTargetHints(player, parent) {
-  for(var y = 0; y < game.bh; y++)
-  for(var x = 0; x < game.bw; x++) {
-    if(!isInitialDwellingTarget(player, x, y)) continue;
-    var co = pixelCo(x, y);
-    drawMapTargetMarker(co, parent, '#f5d36e', 'rgba(247,213,112,.72)');
-  }
-}
-
-// Used for ordinary build and upgrade modes. The associated predicate is set
-// by the human controller and deliberately describes only targets that are
-// safe to choose; final resource/rule validation still happens on Execute.
-function drawActionMapTargetHints(parent) {
-  if(!mapActionTargetFun) return;
-  for(var y = 0; y < game.bh; y++)
-  for(var x = 0; x < game.bw; x++) {
-    if(!mapActionTargetFun(x, y)) continue;
-    var co = pixelCo(x, y);
-    drawMapTargetMarker(co, parent, '#86cfb0', 'rgba(102,192,148,.62)');
-  }
 }
 
 var actionPlanSummaryElement = null;
@@ -2999,9 +3052,8 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
   }
   if(actionDrawer == 'build') {
     drawActionDrawer(px, py, 'Build & dig', 'The board stays visible for your target choice.', [
-      {label: 'DIG & BUILD', detail: 'Transform terrain, then build', available: true, title: 'Dig on terrain and build.', click: function() { digAndBuildFun(DBM_BUILD, 'click where to dig & build'); }},
-      {label: 'TRANSFORM', detail: 'Choose another terrain transformation', available: true, title: 'Transform terrain without defaulting to build.', click: function() { digAndBuildFun(digAndBuildMode == DBM_BUILD ? DBM_COLOR : digAndBuildMode, 'click where to dig'); }},
-      {label: 'BUILD DWELLING', detail: 'Build on terrain of your colour', available: true, title: 'Build a dwelling on a reachable terrain of your colour.', click: function() { beginBuildDwellingAction(player); }}
+      {label: 'BUILD A DWELLING', detail: 'Dig if needed, then build', available: true, title: 'Choose terrain for a dwelling; required digging is added automatically.', click: function() { digAndBuildFun(DBM_BUILD, 'click an empty terrain hex to build a dwelling'); }},
+      {label: 'DIG', detail: 'Transform terrain only', available: true, title: 'Choose terrain to transform toward your colour.', click: function() { digAndBuildFun(DBM_COLOR, 'click terrain to dig'); }}
     ], parent);
     return;
   }
@@ -3401,15 +3453,12 @@ function drawMapClick() {
           if(mapActionTargetFun && !mapActionTargetFun(x, y)) return;
           mapClickFun(x, y);
         } else if(executeButtonFun_ /*the way to check a human is doing action. TODO: improve that way*/) {
-          // An automatic action based on clicking on the map
+          // The standard map interaction: an empty terrain click queues a
+          // complete dwelling action, including any necessary transforms.
           var player = getCurrentPlayer();
           var b = getBuilding(x, y);
           if(b[0] == B_NONE && getWorld(x, y) != I && getWorld(x, y) != N) {
-            //digAndBuildMode = DBM_BUILD;
-            //prepareAutoDigAndBuildActions(x, y);
-            var tactions = getAutoTransformActions(player, x, y, player.getMainDigColor(), getFreeSpades(player, pactions), 999);
-            for(var i = 0; i < tactions.length; i++) prepareAction(tactions[i]);
-            if(digAndBuildMode == DBM_BUILD) prepareAction(makeActionWithXY(A_BUILD, x, y));
+            prepareBuildDwellingAt(player, x, y);
           } else if(b[1] == player.woodcolor) {
             if(b[0] == B_D) prepareAction(makeActionWithXY(A_UPGRADE_TP, x, y));
             // A TP has two possible destinations. When one or both are
@@ -3511,8 +3560,8 @@ function positionUtilityFooter() {
 
 function styleGameChromeButton(button, primary) {
   button.style.boxSizing = 'border-box';
-  button.style.height = primary ? '30px' : '24px';
-  button.style.padding = primary ? '8px 14px' : '5px 9px';
+  button.style.height = primary ? '32px' : '26px';
+  button.style.padding = primary ? '8px 14px' : '6px 10px';
   button.style.border = primary ? '1px solid #55271c' : '1px solid #866142';
   button.style.borderRadius = primary ? '7px' : '5px';
   button.style.background = primary ? 'linear-gradient(#b95839, #762f22)' : 'linear-gradient(#fff8e6, #dcc08c)';
@@ -3529,7 +3578,7 @@ function styleGameChromeButton(button, primary) {
 }
 
 function makeGameChromeButton(px, py, width, label, parent, click, title, primary) {
-  var button = makeSizedDiv(px, py, width, primary ? 30 : 24, parent);
+  var button = makeSizedDiv(px, py, width, primary ? 32 : 26, parent);
   styleGameChromeButton(button, primary);
   button.innerHTML = label;
   button.onclick = click;
@@ -3548,30 +3597,72 @@ function makeGameChromeTitle(parent) {
   return title;
 }
 
+function makeGameConfirmation(titleText, messageText, confirmLabel, confirmTitle, confirm) {
+  var popupDock = getGameplayPopupDock(440, 205);
+  var el = makeSizedDiv(popupDock.x, popupDock.y, 440, 205, document.body);
+  el.style.boxSizing = 'border-box';
+  el.style.padding = '14px';
+  el.style.background = 'linear-gradient(145deg, #fff8e4, #e8d1a0)';
+  el.style.border = '3px solid #67452c';
+  el.style.borderRadius = '12px';
+  el.style.boxShadow = '0 8px 20px rgba(30,18,9,.34), inset 0 0 0 2px rgba(255,255,255,.5)';
+  el.style.zIndex = 2000;
+  makeStandalonePanelDragHandle(el, 440);
+
+  var title = makeSizedDiv(20, 35, 400, 25, el);
+  title.style.color = '#4a2f1d';
+  title.style.fontFamily = 'Georgia, serif';
+  title.style.fontSize = '18px';
+  title.style.fontWeight = 'bold';
+  title.style.textAlign = 'center';
+  title.innerHTML = titleText;
+
+  var message = makeSizedDiv(32, 70, 376, 35, el);
+  message.style.color = '#5b402a';
+  message.style.fontSize = '11px';
+  message.style.lineHeight = '16px';
+  message.style.textAlign = 'center';
+  message.innerHTML = messageText;
+
+  makeGameChromeButton(70, 132, 136, confirmLabel, el, function() {
+    document.body.removeChild(el);
+    confirm();
+  }, confirmTitle, true);
+
+  makeGameChromeButton(234, 135, 136, 'Keep Playing', el, function() {
+    document.body.removeChild(el);
+  }, 'Close this confirmation and continue the current game', false);
+}
+
 function newGameWarning() {
   if(state.type == S_PRE) return;
-  var popupDock = getGameplayPopupDock(400, 150);
-  var el = makeSizedDiv(popupDock.x, popupDock.y, 400, 150, document.body);
-  el.style.backgroundColor = 'white';
-  el.style.border = '1px solid black';
-  makeStandalonePanelDragHandle(el, 400);
+  makeGameConfirmation(
+      'Start a New Game?',
+      'This will end the current game and discard its unsaved progress.',
+      'Start New Game',
+      'End this game and return to setup',
+      resetAndBeginNewGame);
+}
 
-  //makeText(5, 5, 'Really remove current game and start a new one?', el);
-  makeCenteredText('Really lose all progress and start a new game?', 400, 50 + (350 / 2), 70, el);
-
-  var button2 = makeButton(70, 60, 'Yes', el, function() {
-    document.body.removeChild(el);
-    resetAndBeginNewGame();
-  }, 'Yes');
-
-  var button3 = makeButton(220, 60, 'No', el, function() {
-    document.body.removeChild(el);
-  }, 'No');
+function restartGameWarning() {
+  if(!undoGameStates.length || !undoGameStates[0]) return;
+  makeGameConfirmation(
+      'Restart This Game?',
+      'This will undo every recorded move and return to the beginning of the match.',
+      'Restart Game',
+      'Undo every recorded move and restart this match',
+      function() {
+        // Match the normal Undo behaviour: when currently at the newest
+        // state, preserve it as the final Redo point before rewinding.
+        if(undoIndex + 1 == undoGameStates.length) undoGameStates.push(saveGameState(game, state, logText));
+        loadGameStateHard(undoGameStates[0]);
+        undoIndex = -1;
+      });
 }
 
 function drawSaveLoadUI(onlyload) {
   var parent = uiElement;
-  var gameTopBar = makeSizedDiv(8, 2, GAMEPLAY_WIDTH - 1, 34, parent);
+  var gameTopBar = makeSizedDiv(8, 2, GAMEPLAY_WIDTH - 1, 42, parent);
   gameTopBar.style.boxSizing = 'border-box';
   gameTopBar.style.border = '1px solid #6a4a31';
   gameTopBar.style.borderRadius = '0 0 9px 9px';
@@ -3667,6 +3758,84 @@ function drawSaveLoadUI(onlyload) {
       }
     }
 
+    function restart() {
+      restartGameWarning();
+    }
+
+    var gameSettingsMenu = null;
+
+    function chooseTurnSequenceSpeed(speed) {
+      fastestMode = speed == 'fastest';
+      fastMode = speed != 'manual';
+
+      // When the existing Continue game panel is waiting, use its callbacks
+      // so the choice takes effect immediately. At any other time this simply
+      // becomes the preference for the next state transition.
+      if(showingNextButtonPanel) {
+        if(speed == 'manual' && nextButtonFun) nextButtonFun();
+        else if(speed == 'fast' && fastButtonFun) fastButtonFun();
+        else if(speed == 'fastest' && fastestButtonFun) fastestButtonFun();
+      } else {
+        drawHud();
+      }
+    }
+
+    function openGameSettings() {
+      if(gameSettingsMenu) {
+        parent.removeChild(gameSettingsMenu);
+        gameSettingsMenu = null;
+        return;
+      }
+
+      gameSettingsMenu = makeSizedDiv(869, 54, 335, 116, parent);
+      gameSettingsMenu.style.boxSizing = 'border-box';
+      gameSettingsMenu.style.padding = '10px';
+      gameSettingsMenu.style.background = 'linear-gradient(145deg, #fff8e4, #e8d1a0)';
+      gameSettingsMenu.style.border = '3px solid #67452c';
+      gameSettingsMenu.style.borderRadius = '10px';
+      gameSettingsMenu.style.boxShadow = '0 7px 16px rgba(30,18,9,.30), inset 0 0 0 1px rgba(255,255,255,.55)';
+      gameSettingsMenu.style.zIndex = 200;
+
+      var heading = makeSizedDiv(10, 8, 309, 16, gameSettingsMenu);
+      heading.style.color = '#4a2f1d';
+      heading.style.fontFamily = 'Georgia, serif';
+      heading.style.fontSize = '12px';
+      heading.style.fontWeight = 'bold';
+      heading.style.letterSpacing = '.35px';
+      heading.style.textAlign = 'center';
+      heading.innerHTML = 'TURN SEQUENCE';
+
+      var selectedSpeed = fastestMode ? 'fastest' : (fastMode ? 'fast' : 'manual');
+      var makeSpeedChoice = function(x, label, detail, speed, activeColor, activeBorder) {
+        var active = speed == selectedSpeed;
+        var choice = makeSizedDiv(x, 32, 97, 67, gameSettingsMenu);
+        choice.style.boxSizing = 'border-box';
+        choice.style.padding = '11px 5px 6px';
+        choice.style.background = active ? activeColor : 'linear-gradient(145deg, #fff9e8, #dbc18c)';
+        choice.style.border = '2px solid ' + (active ? activeBorder : '#8a6744');
+        choice.style.borderRadius = '7px';
+        choice.style.boxShadow = active ? '0 2px 4px rgba(46,28,13,.30), inset 0 1px 1px rgba(255,255,255,.28)' : 'inset 0 1px 0 rgba(255,255,255,.68)';
+        choice.style.color = active ? '#fffdf0' : '#51351f';
+        choice.style.cursor = 'pointer';
+        choice.style.fontWeight = 'bold';
+        choice.style.textAlign = 'center';
+        choice.style.userSelect = 'none';
+        choice.innerHTML = '<div style="font-size:12px;line-height:16px">' + label + '</div><div style="font-size:9px;line-height:12px">' + detail + '</div>';
+        choice.title = detail;
+        choice.onclick = function() {
+          parent.removeChild(gameSettingsMenu);
+          gameSettingsMenu = null;
+          chooseTurnSequenceSpeed(speed);
+        };
+      };
+      makeSpeedChoice(10, 'Manual', 'Press Next each time', 'manual',
+          'linear-gradient(145deg, #bd643e, #7e3525)', '#5b291d');
+      makeSpeedChoice(119, 'Fast', 'Until your turn', 'fast',
+          'linear-gradient(145deg, #6a9b8a, #38695c)', '#294e44');
+      makeSpeedChoice(228, 'Fastest', 'Keep going', 'fastest',
+          'linear-gradient(145deg, #4e8a69, #1d5a43)', '#164634');
+    }
+
     function openHelp() {
       var popupDock = getGameplayPopupDock(400, 235);
       var el = makeSizedDiv(popupDock.x, popupDock.y, 400, 235, document.body);
@@ -3698,14 +3867,23 @@ function drawSaveLoadUI(onlyload) {
       drawDebugActions(0, 563, 850);
     }
 
-    // Undo and redo are part of active play, so they receive the only prime
-    // placement in the top bar. All session utilities live together below
-    // the player boards, where they stay available without competing with the
-    // map, action panel, or turn prompts.
-    makeGameChromeButton(220, 2, 86, 'UNDO', gameTopBar, undo, 'Undo last action', true);
-    makeGameChromeButton(314, 2, 86, 'REDO', gameTopBar, redo, 'Redo undone action', true);
+    // Separate action history, the upcoming settings area, and game
+    // navigation so the header can grow without becoming a single button row.
+    makeGameChromeButton(630, 5, 74, 'Undo', gameTopBar, undo, 'Undo last action', true);
+    makeGameChromeButton(710, 5, 74, 'Redo', gameTopBar, redo, 'Redo undone action', true);
+    makeGameChromeButton(790, 5, 82, 'Restart', gameTopBar, restart,
+        undoGameStates.length ? 'Undo every recorded move and restart this match' : 'Restart is unavailable until the first undo state is recorded', true);
+    var historySettingsDivider = makeSizedDiv(885, 8, 1, 26, gameTopBar);
+    historySettingsDivider.style.background = 'rgba(106,74,49,.42)';
+    historySettingsDivider.style.boxShadow = '1px 0 0 rgba(255,255,255,.55)';
+    makeGameChromeButton(900, 8, 106, 'Game Settings', gameTopBar, openGameSettings, 'Game Settings are coming soon', false);
+    var settingsNavigationDivider = makeSizedDiv(1019, 8, 1, 26, gameTopBar);
+    settingsNavigationDivider.style.background = 'rgba(106,74,49,.42)';
+    settingsNavigationDivider.style.boxShadow = '1px 0 0 rgba(255,255,255,.55)';
+    makeGameChromeButton(1034, 8, 68, 'Home', gameTopBar, goHome, 'Go to the main page and start a new game', false);
+    makeGameChromeButton(1108, 8, 96, 'New Game', gameTopBar, goHome, 'Start a new game', false);
 
-    utilityFooter = makeSizedDiv(5, 0, 470, 29, parent);
+    utilityFooter = makeSizedDiv(5, 0, 370, 31, parent);
     utilityFooter.style.boxSizing = 'border-box';
     utilityFooter.style.padding = '2px 5px';
     utilityFooter.style.border = '1px solid #765439';
@@ -3713,23 +3891,21 @@ function drawSaveLoadUI(onlyload) {
     utilityFooter.style.background = 'linear-gradient(90deg, rgba(255,248,228,.92), rgba(222,193,141,.92))';
     utilityFooter.style.boxShadow = '0 2px 5px rgba(58,39,22,.18), inset 0 1px 0 rgba(255,255,255,.6)';
     utilityFooter.style.zIndex = 100;
-    makeGameChromeButton(5, 2, 58, 'HOME', utilityFooter, goHome, 'Go to the main page and start a new game', false);
-    makeGameChromeButton(68, 2, 52, 'SAVE', utilityFooter, openSave, 'Save this game to text', false);
-    makeGameChromeButton(125, 2, 52, 'LOAD', utilityFooter, openLoad, 'Load a saved game', false);
-    makeGameChromeButton(182, 2, 54, 'NEW', utilityFooter, goHome, 'Start a new game', false);
-    makeGameChromeButton(241, 2, 55, 'HELP', utilityFooter, openHelp, 'Show user interface help', false);
-    makeGameChromeButton(301, 2, 60, 'DEBUG', utilityFooter, openDebug, 'Developer actions', false);
+    makeGameChromeButton(5, 2, 52, 'SAVE', utilityFooter, openSave, 'Save this game to text', false);
+    makeGameChromeButton(62, 2, 52, 'LOAD', utilityFooter, openLoad, 'Load a saved game', false);
+    makeGameChromeButton(119, 2, 55, 'HELP', utilityFooter, openHelp, 'Show user interface help', false);
+    makeGameChromeButton(179, 2, 60, 'DEBUG', utilityFooter, openDebug, 'Developer actions', false);
     positionUtilityFooter();
   } else {
-    makeGameChromeButton(1025, 5, 135, 'LOAD A GAME', gameTopBar, openLoad, 'Load a saved game', false);
+    makeGameChromeButton(1025, 8, 135, 'Load a Game', gameTopBar, openLoad, 'Load a saved game', false);
   }
 }
 
 function resetAndBeginNewGame() {
   clearHumanState();
   state.type = S_PRE;
-  fastestMode = false;
-  fastMode = false;
+  fastestMode = true;
+  fastMode = true;
   autoLeech = false;
   autoLeech1 = false;
   autoLeechNo = false;

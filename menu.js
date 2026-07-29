@@ -379,12 +379,12 @@ function renderPreScreen(px, py, standardButtonFun, randomButtonFun, beginnerBut
     ' Please note that having all bonus tiles selected or having none selected has the same effect: full randomness. </p><p>For all preset options,' +
     ' the game will resolve conflicts (such as choosing two factions of the same color or the same round tile twice) automatically with random selection.</p>' +
     '<h4>Performing Actions</h4>' +
-    '<p>When it is your turn, actions run automatically once every required choice is complete. For example, choose an action and then its map, cult, favor, or town target; the game submits it immediately.' +
-    ' Use the AUTO-RUN toggle in the turn plan to turn this off, then press RUN TURN when your full plan is ready (for example, after resource conversions). Use Undo if you want to take it back. Depending on the action, the on-screen instructions will tell you what to choose next.</p>' +
+    '<p>When it is your turn, actions run automatically once every required choice is complete. Resource conversions stay in the turn plan until you add a turn action, so you can follow a conversion by clicking the board.' +
+    ' Use the AUTO-RUN toggle in the turn plan to turn this off, then press RUN TURN when your full plan is ready. Use Undo if you want to take it back. Depending on the action, the on-screen instructions will tell you what to choose next.</p>' +
     '<p>After doing an action, you can press Next to cycle through the AI\'s actions, or Fast to go through them faster.</p>' +
     '<p>To get the basic idea, here are some click sequences for typical actions:<br/>' +
-    ' -dig&build: click on a map tile. It will automatically do as many dig actions as needed to make the tile your color, put a dwelling on it, and submit the action.<br/>' +
-    ' -dig once: use the dig or dig&build button, but then before clicking on the map, first set the transform mode to "transform once"<br/>' +
+    ' -build a dwelling: click an empty terrain hex. It adds any needed digging and the dwelling to your turn plan.<br/>' +
+    ' -dig: open Build &amp; Dig, choose Dig, then click the terrain to transform.<br/>' +
     ' -cult: click on a cult track to send a priest to 3 if available, otherwise 2 if available, otherwise 1<br/>' +
     ' -upgr1: click a dwelling to upgrade to TP, or a TP to upgrade to SH<br/>' +
     ' -upgr2: click a TP to upgrade to TE, or a TE to upgrade to SA<br/>' +
