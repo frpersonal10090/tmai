@@ -2319,8 +2319,12 @@ function drawPowerActionRail() {
 
   for(var i = 0; i < powerActions.length; i++) {
     (function(action, index) {
-      var used = !!game.octogons[action.type];
-      var canUse = !used && state.type == S_ACTION && player && player.human;
+      // Some factions override octagon availability. In particular, Yetis may
+      // reuse power actions after building their stronghold, even when the
+      // shared octagon is marked as taken.
+      var available = player && player.getFaction().canTakeAction(player, action.type, game);
+      var used = !available;
+      var canUse = available && state.type == S_ACTION && player.human;
       var card = makeSizedDiv(9, 71 + index * 67, 70, 61, hudElement);
       card.style.boxSizing = 'border-box';
       card.style.padding = '5px 3px';
