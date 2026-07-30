@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Usage: node score_diagnostics.js --positions 100 --seed 12345 [--json] [--quiet]
+// Usage: node score_diagnostics.js --positions 100 --seed 12345 [--ai 5|6] [--json] [--quiet]
 
 var fs = require('fs');
 var path = require('path');
@@ -62,10 +62,11 @@ function loadSources(context) {
 }
 
 function parseArgs(argv) {
-  var options = {positions: 100, seed: 1, json: false, quiet: false};
+  var options = {positions: 100, seed: 1, aiLevel: 5, json: false, quiet: false};
   for(var i = 0; i < argv.length; i++) {
     if(argv[i] == '--positions') options.positions = Number(argv[++i]);
     else if(argv[i] == '--seed') options.seed = Number(argv[++i]);
+    else if(argv[i] == '--ai') options.aiLevel = Number(argv[++i]);
     else if(argv[i] == '--json') options.json = true;
     else if(argv[i] == '--quiet') options.quiet = true;
     else if(argv[i] == '--help') options.help = true;
@@ -90,6 +91,7 @@ function formatCounts(counts) {
 function formatReport(report) {
   var lines = [
     'Terra Mystica AI score-purity diagnostic',
+    'AI level: ' + report.aiLevel,
     'seed: ' + report.seed,
     'positions sampled: ' + report.positionsSampled + '/' + report.requestedPositions,
     'turns analyzed: ' + report.turnsAnalyzed,
@@ -127,7 +129,7 @@ function formatReport(report) {
 function main() {
   var options = parseArgs(process.argv.slice(2));
   if(options.help) {
-    console.log('Usage: node score_diagnostics.js --positions <positive integer> --seed <integer> [--json] [--quiet]');
+    console.log('Usage: node score_diagnostics.js --positions <positive integer> --seed <integer> [--ai 5|6] [--json] [--quiet]');
     return;
   }
   var context = createDiagnosticContext();
@@ -136,6 +138,7 @@ function main() {
   var report = context.runScoreDiagnostics({
     positions: options.positions,
     seed: options.seed,
+    aiLevel: options.aiLevel,
     onProgress: function(progress) {
       if(options.quiet || options.json) return;
       if(progress.positionsSampled == 1 || progress.positionsSampled == progress.requestedPositions || progress.positionsSampled % interval == 0) {

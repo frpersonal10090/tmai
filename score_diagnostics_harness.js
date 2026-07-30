@@ -404,6 +404,15 @@ function scoreDiagnosticsAnalyzeTurn(playerIndex, position, seed, report) {
         report.selectedActionChangeSamples.push({position: position, faction: faction, round: round, original: original.selected, reversed: reversed.selected, shuffled: shuffled.selected});
       }
     }
+    report.positionSelections.push({
+      position: position,
+      faction: faction,
+      round: round,
+      scoreAffected: positionHasScoreChange,
+      original: original.selected,
+      reversed: reversed.selected,
+      shuffled: shuffled.selected
+    });
 
     for(var i = 0; i < prepared.candidates.length; i++) {
       var candidate = prepared.candidates[i];
@@ -474,11 +483,14 @@ function runScoreDiagnostics(options) {
   options = options || {};
   var requestedPositions = options.positions == undefined ? 100 : options.positions;
   var seed = options.seed == undefined ? 1 : options.seed;
+  var aiLevel = options.aiLevel == undefined ? 5 : options.aiLevel;
   if(requestedPositions < 1 || requestedPositions != Math.floor(requestedPositions)) throw new Error('positions must be a positive integer');
   if(seed != Math.floor(seed)) throw new Error('seed must be an integer');
+  if(aiLevel != 5 && aiLevel != 6) throw new Error('aiLevel must be 5 or 6');
 
   var report = {
     seed: seed,
+    aiLevel: aiLevel,
     requestedPositions: requestedPositions,
     positionsSampled: 0,
     turnsAnalyzed: 0,
@@ -495,6 +507,7 @@ function runScoreDiagnostics(options) {
     affectedRounds: {},
     affectedActionTypes: {},
     selectedActionChangeSamples: [],
+    positionSelections: [],
     affectedCandidateSamples: [],
     scoreDifferences: [],
     mutations: {},
@@ -542,7 +555,7 @@ function runScoreDiagnostics(options) {
       var scenario = benchmarkCreateScenario(scenarioSeed, scenarioParams);
       report.scenariosUsed++;
       loadGameState(scenario.snapshot);
-      benchmarkSetActors([5, 5]);
+      benchmarkSetActors([aiLevel, aiLevel]);
       setBenchmarkRandomSeed(scenario.setup.actionSeed);
       // Small batches from deterministic fresh games spread the sample over
       // factions and rounds without spending the whole run replaying every

@@ -12,3 +12,10 @@ var AILevel6 = function() {
   AILou.call(this, 5);
 };
 inherit(AILevel6, AILou);
+
+// AILou.scoreAction mutates the supplied score values for some candidates.
+// Level 6 gives every candidate its own complete values tree while retaining
+// the shared scorer and all Level 5 behavior.
+AILevel6.prototype.scoreActionAI_ = function(player, actions, roundnum) {
+  return AILou.scoreAction(player, actions, clone(this.scoreActionValues), roundnum, this.ail);
+};

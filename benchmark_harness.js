@@ -152,9 +152,45 @@ function benchmarkSameOutcome(left, right) {
   return true;
 }
 
+function benchmarkSameGame(left, right) {
+  if(!!left.crash != !!right.crash) return false;
+  if(left.crash) return left.crash == right.crash;
+  return benchmarkSameOutcome(left, right) &&
+      left.trace.join('\n') == right.trace.join('\n') &&
+      JSON.stringify(left.rejected) == JSON.stringify(right.rejected);
+}
+
 function benchmarkBucket(table, key) {
   if(!table[key]) table[key] = {games: 0, l5Wins: 0, l6Wins: 0, ties: 0, l5Vp: 0, l6Vp: 0};
   return table[key];
+}
+
+function benchmarkPairedBucket(table, key) {
+  if(!table[key]) table[key] = {samples: 0, l5Wins: 0, l6Wins: 0, ties: 0, l5Vp: 0, l6Vp: 0, vpDeltas: []};
+  return table[key];
+}
+
+function benchmarkAddPairedBucket(table, key, l5, l6) {
+  var bucket = benchmarkPairedBucket(table, key);
+  var delta = l6.vp - l5.vp;
+  bucket.samples++;
+  bucket.l5Vp += l5.vp;
+  bucket.l6Vp += l6.vp;
+  bucket.vpDeltas.push(delta);
+  if(delta == 0) bucket.ties++;
+  else if(delta < 0) bucket.l5Wins++;
+  else bucket.l6Wins++;
+}
+
+function benchmarkLevelPlayers(gameResult) {
+  if(gameResult.crash) return null;
+  var l5 = null;
+  var l6 = null;
+  for(var i = 0; i < gameResult.players.length; i++) {
+    if(gameResult.players[i].level == 5) l5 = gameResult.players[i];
+    else if(gameResult.players[i].level == 6) l6 = gameResult.players[i];
+  }
+  return l5 && l6 ? {l5: l5, l6: l6} : null;
 }
 
 function benchmarkAddGameToReport(report, gameResult, onError, scenarioIndex, gameName) {
@@ -165,18 +201,17 @@ function benchmarkAddGameToReport(report, gameResult, onError, scenarioIndex, ga
   if(gameResult.crash) {
     report.crashes.push(gameResult.crash);
     if(onError) onError({type: 'crash', scenario: scenarioIndex, game: gameName, error: gameResult.crash});
-    return;
+    return null;
   }
-  var l5 = null;
-  var l6 = null;
-  for(var i = 0; i < gameResult.players.length; i++) {
-    if(gameResult.players[i].level == 5) l5 = gameResult.players[i];
-    else if(gameResult.players[i].level == 6) l6 = gameResult.players[i];
+  var levels = benchmarkLevelPlayers(gameResult);
+  if(!levels) {
+    var invalidGame = 'benchmark game did not contain exactly one Level 5 and one Level 6 actor';
+    report.crashes.push(invalidGame);
+    if(onError) onError({type: 'invalid state', scenario: scenarioIndex, game: gameName, error: invalidGame});
+    return null;
   }
-  if(!l5 || !l6) {
-    report.crashes.push('benchmark game did not contain exactly one Level 5 and one Level 6 actor');
-    return;
-  }
+  var l5 = levels.l5;
+  var l6 = levels.l6;
   report.completedGames++;
   report.l5Vp += l5.vp;
   report.l6Vp += l6.vp;
@@ -204,6 +239,96 @@ function benchmarkAddGameToReport(report, gameResult, onError, scenarioIndex, ga
       }
     }
   }
+  return levels;
+}
+
+function benchmarkAddPairedResult(report, gameA, gameB, levelsA, levelsB) {
+  if(!levelsA || !levelsB) return false;
+  var paired = report.paired;
+  var l5Vp = levelsA.l5.vp + levelsB.l5.vp;
+  var l6Vp = levelsA.l6.vp + levelsB.l6.vp;
+  var delta = l6Vp - l5Vp;
+  paired.completedScenarios++;
+  paired.l5Vp += l5Vp;
+  paired.l6Vp += l6Vp;
+  paired.vpDeltas.push(delta);
+  if(delta == 0) paired.ties++;
+  else if(delta < 0) paired.l5Wins++;
+  else paired.l6Wins++;
+
+  var players = [levelsA.l5, levelsA.l6, levelsB.l5, levelsB.l6];
+  var byFaction = {};
+  var bySeat = {};
+  for(var i = 0; i < players.length; i++) {
+    var player = players[i];
+    var faction = byFaction[player.faction] || (byFaction[player.faction] = {});
+    var seat = bySeat[player.seat] || (bySeat[player.seat] = {});
+    if(player.level == 5) {
+      faction.l5 = player;
+      seat.l5 = player;
+    } else {
+      faction.l6 = player;
+      seat.l6 = player;
+    }
+  }
+  var factionKeys = Object.keys(byFaction);
+  for(var j = 0; j < factionKeys.length; j++) {
+    var factionPlayers = byFaction[factionKeys[j]];
+    if(factionPlayers.l5 && factionPlayers.l6) {
+      benchmarkAddPairedBucket(report.pairedByFaction, factionKeys[j], factionPlayers.l5, factionPlayers.l6);
+    }
+  }
+  var seatKeys = Object.keys(bySeat);
+  for(var k = 0; k < seatKeys.length; k++) {
+    var seatPlayers = bySeat[seatKeys[k]];
+    if(seatPlayers.l5 && seatPlayers.l6) {
+      benchmarkAddPairedBucket(report.pairedBySeat, 'seat' + seatKeys[k], seatPlayers.l5, seatPlayers.l6);
+    }
+  }
+  return true;
+}
+
+function benchmarkStatistics(values) {
+  if(!values.length) {
+    return {count: 0, mean: null, median: null, standardDeviation: null, standardError: null, confidence95: {low: null, high: null}, min: null, max: null};
+  }
+  var total = 0;
+  var min = values[0];
+  var max = values[0];
+  for(var i = 0; i < values.length; i++) {
+    total += values[i];
+    if(values[i] < min) min = values[i];
+    if(values[i] > max) max = values[i];
+  }
+  var mean = total / values.length;
+  var sorted = values.slice().sort(function(left, right) { return left - right; });
+  var middle = Math.floor(sorted.length / 2);
+  var median = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  var variance = 0;
+  for(var j = 0; j < values.length; j++) variance += Math.pow(values[j] - mean, 2);
+  var standardDeviation = values.length > 1 ? Math.sqrt(variance / (values.length - 1)) : 0;
+  var standardError = standardDeviation / Math.sqrt(values.length);
+  return {
+    count: values.length,
+    mean: mean,
+    median: median,
+    standardDeviation: standardDeviation,
+    standardError: standardError,
+    confidence95: {low: mean - 1.96 * standardError, high: mean + 1.96 * standardError},
+    min: min,
+    max: max
+  };
+}
+
+function benchmarkAddStatistics(target, values) {
+  var statistics = benchmarkStatistics(values);
+  target.meanVpDelta = statistics.mean;
+  target.medianVpDelta = statistics.median;
+  target.standardDeviation = statistics.standardDeviation;
+  target.standardError = statistics.standardError;
+  target.confidence95 = statistics.confidence95;
+  target.minVpDelta = statistics.min;
+  target.maxVpDelta = statistics.max;
 }
 
 function runBenchmark(options) {
@@ -212,6 +337,8 @@ function runBenchmark(options) {
   var seed = options.seed == undefined ? 1 : options.seed;
   var onProgress = options.onProgress;
   var onError = options.onError;
+  var mode = options.expectEquivalent ? 'equivalence' : 'competitive';
+  var verifyReproducibility = !!options.verifyReproducibility;
   if(pairs < 1 || pairs != Math.floor(pairs)) throw new Error('pairs must be a positive integer');
   if(seed != Math.floor(seed)) throw new Error('seed must be an integer');
   var params = options.params || benchmarkDefaultParams();
@@ -220,6 +347,7 @@ function runBenchmark(options) {
   var started = new Date().getTime();
   var report = {
     seed: seed,
+    mode: mode,
     scenarios: pairs,
     games: pairs * 2,
     completedGames: 0,
@@ -233,6 +361,11 @@ function runBenchmark(options) {
     crashes: [],
     byFaction: {},
     bySeat: {},
+    paired: {completedScenarios: 0, l5Wins: 0, l6Wins: 0, ties: 0, l5Vp: 0, l6Vp: 0, vpDeltas: []},
+    pairedByFaction: {},
+    pairedBySeat: {},
+    comparisons: {traceMatches: 0, traceMismatches: 0, outcomeMatches: 0, outcomeMismatches: 0, unavailable: 0},
+    reproducibility: {checkedGames: 0, failures: []},
     equivalence: {passed: 0, failed: []},
     scenariosDetail: []
   };
@@ -257,12 +390,40 @@ function runBenchmark(options) {
       continue;
     }
     var gameA = benchmarkRunGame(scenario.snapshot, [5, 6], scenario.setup.actionSeed);
-    benchmarkAddGameToReport(report, gameA, onError, i, 'A');
+    var levelsA = benchmarkAddGameToReport(report, gameA, onError, i, 'A');
     var gameB = benchmarkRunGame(scenario.snapshot, [6, 5], scenario.setup.actionSeed);
-    benchmarkAddGameToReport(report, gameB, onError, i, 'B');
+    var levelsB = benchmarkAddGameToReport(report, gameB, onError, i, 'B');
+    if(verifyReproducibility) {
+      var originalGames = [gameA, gameB];
+      var levels = [[5, 6], [6, 5]];
+      for(var replayIndex = 0; replayIndex < originalGames.length; replayIndex++) {
+        var replay = benchmarkRunGame(scenario.snapshot, levels[replayIndex], scenario.setup.actionSeed);
+        report.reproducibility.checkedGames++;
+        if(!benchmarkSameGame(originalGames[replayIndex], replay)) {
+          var reproducibilityFailure = {
+            scenario: i,
+            game: replayIndex == 0 ? 'A' : 'B',
+            setup: scenario.setup,
+            originalCrash: originalGames[replayIndex].crash,
+            replayCrash: replay.crash
+          };
+          report.reproducibility.failures.push(reproducibilityFailure);
+          if(onError) onError({type: 'reproducibility', scenario: i, game: reproducibilityFailure.game, error: 'replay did not match its original game'});
+        }
+      }
+    }
     var sameTrace = gameA.trace.join('\n') == gameB.trace.join('\n');
     var sameOutcome = benchmarkSameOutcome(gameA, gameB);
-    if(!gameA.crash && !gameB.crash && sameTrace && sameOutcome) report.equivalence.passed++;
+    if(levelsA && levelsB) {
+      if(sameTrace) report.comparisons.traceMatches++;
+      else report.comparisons.traceMismatches++;
+      if(sameOutcome) report.comparisons.outcomeMatches++;
+      else report.comparisons.outcomeMismatches++;
+      benchmarkAddPairedResult(report, gameA, gameB, levelsA, levelsB);
+    } else {
+      report.comparisons.unavailable++;
+    }
+    if(levelsA && levelsB && sameTrace && sameOutcome) report.equivalence.passed++;
     else report.equivalence.failed.push({
       scenario: i,
       setup: scenario.setup,
@@ -284,6 +445,16 @@ function runBenchmark(options) {
   report.averageVpL5 = report.completedGames ? report.l5Vp / report.completedGames : 0;
   report.averageVpL6 = report.completedGames ? report.l6Vp / report.completedGames : 0;
   report.averageVpDifference = report.completedGames ? report.vpDifference / report.completedGames : 0;
+  benchmarkAddStatistics(report.paired, report.paired.vpDeltas);
+  var pairedFactionKeys = Object.keys(report.pairedByFaction);
+  for(var j = 0; j < pairedFactionKeys.length; j++) {
+    benchmarkAddStatistics(report.pairedByFaction[pairedFactionKeys[j]], report.pairedByFaction[pairedFactionKeys[j]].vpDeltas);
+  }
+  var pairedSeatKeys = Object.keys(report.pairedBySeat);
+  for(var k = 0; k < pairedSeatKeys.length; k++) {
+    benchmarkAddStatistics(report.pairedBySeat[pairedSeatKeys[k]], report.pairedBySeat[pairedSeatKeys[k]].vpDeltas);
+  }
   report.runtimeMs = new Date().getTime() - started;
+  report.gamesPerSecond = report.runtimeMs ? report.completedGames / (report.runtimeMs / 1000) : 0;
   return report;
 }
