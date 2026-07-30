@@ -461,6 +461,15 @@ function getCultColor(cult) {
   if(cult == C_A) return '#ddd';
 }
 
+// Keep each full track visually tied to its cult without competing with the
+// player markers, level values, or the more saturated header colour.
+function getCultTrackBackground(cult) {
+  if(cult == C_F) return 'linear-gradient(180deg, rgba(255,235,228,.97), rgba(235,185,170,.99))';
+  if(cult == C_W) return 'linear-gradient(180deg, rgba(229,242,247,.97), rgba(179,210,226,.99))';
+  if(cult == C_E) return 'linear-gradient(180deg, rgba(247,235,213,.97), rgba(210,180,136,.99))';
+  if(cult == C_A) return 'linear-gradient(180deg, rgba(241,245,245,.97), rgba(199,214,217,.99))';
+}
+
 //aka "renderCultTracks"
 function drawCultTracks(px, py) {
   var trackwidth = 58;
@@ -478,7 +487,7 @@ function drawCultTracks(px, py) {
     track.style.boxSizing = 'border-box';
     track.style.border = '2px solid #59422e';
     track.style.borderRadius = '7px';
-    track.style.background = 'linear-gradient(180deg, rgba(255,255,255,.92), rgba(235,220,183,.96))';
+    track.style.background = getCultTrackBackground(cult);
     track.style.boxShadow = 'inset 0 0 0 1px rgba(255,255,255,.65), 0 2px 4px rgba(59,40,23,.22)';
 
     var header = makeSizedDiv(x + 2, y + 2, trackwidth - 4, 20, hudElement);
@@ -1321,19 +1330,23 @@ function renderRoundTile(px, py, tile, details, index, scale, parent) {
   divider.style.background = 'rgba(238,224,180,.58)';
   divider.style.fontSize = '0%';
 
-  if(details.cult == 'priest') {
-    // Treat the priest and multiplier as one compact group centered in the
-    // left result area.
-    drawTileIcon(Math.round(leftZoneCenter - 9), drawY + 35, 'priest', drawParent, true);
-    var priestLabel = makeSizedDiv(Math.round(leftZoneCenter + 2), drawY + 38, 7, 8, drawParent);
-    styleBonusTileText(priestLabel, 7, 'bold', '#f6efd9');
-    priestLabel.style.textAlign = 'center';
-    priestLabel.innerHTML = '×';
-  } else {
-    drawCultRequirement(Math.round(leftZoneCenter - 14 / 2), drawY + 34, details.cult, details.threshold, drawParent);
+  // The cult reward is granted at round end. On the sixth tile it has no
+  // following round to affect, so preserve its slot but leave it blank.
+  if(index != 6) {
+    if(details.cult == 'priest') {
+      // Treat the priest and multiplier as one compact group centered in the
+      // left result area.
+      drawTileIcon(Math.round(leftZoneCenter - 9), drawY + 35, 'priest', drawParent, true);
+      var priestLabel = makeSizedDiv(Math.round(leftZoneCenter + 2), drawY + 38, 7, 8, drawParent);
+      styleBonusTileText(priestLabel, 7, 'bold', '#f6efd9');
+      priestLabel.style.textAlign = 'center';
+      priestLabel.innerHTML = '×';
+    } else {
+      drawCultRequirement(Math.round(leftZoneCenter - 14 / 2), drawY + 34, details.cult, details.threshold, drawParent);
+    }
+    drawTileArrow(tileArrowX, drawY + 36, drawParent);
+    drawTileReward(Math.round(rightZoneCenter - 12 / 2), drawY + 34, details.reward, drawParent);
   }
-  drawTileArrow(tileArrowX, drawY + 36, drawParent);
-  drawTileReward(Math.round(rightZoneCenter - 12 / 2), drawY + 34, details.reward, drawParent);
 
   var roundLabel = makeSizedDiv(drawX + 2, drawY - 12, 66, 10, drawParent);
   styleBonusTileText(roundLabel, 8, 'bold', '#493f38');
@@ -1971,32 +1984,38 @@ function drawUserFactionBoard(px, py, width) {
   if(!image) {
     var emptyBoard = makeSizedDiv(0, 0, width, USER_FACTION_BOARD_HEIGHT, boardPanel);
     emptyBoard.style.display = 'flex';
+    emptyBoard.style.flexDirection = 'column';
     emptyBoard.style.alignItems = 'center';
     emptyBoard.style.justifyContent = 'center';
     emptyBoard.style.color = '#684625';
     emptyBoard.style.fontFamily = 'Georgia, "Times New Roman", serif';
-    emptyBoard.style.fontSize = '18px';
-    emptyBoard.style.fontWeight = 'bold';
-    emptyBoard.innerHTML = hasFaction ?
-        factionName + ' is an expansion faction; this reference includes the 14 original factions.' :
-        'Choose your faction to reveal its board.';
-    return;
+    if(hasFaction) {
+      emptyBoard.innerHTML = '<div style="font-size:18px;font-weight:bold">' + factionName +
+          ' faction-board artwork is coming soon.</div><div style="margin-top:8px;font-family:verdana,arial,sans-serif;font-size:11px;font-weight:normal">' +
+          'Your live resources, advances, income, and claimed tiles remain available here.</div>';
+    } else {
+      emptyBoard.style.fontSize = '18px';
+      emptyBoard.style.fontWeight = 'bold';
+      emptyBoard.innerHTML = 'Choose your faction to reveal its board.';
+      return;
+    }
+  } else {
+    var boardImage = makeElement(boardPanel, 'img');
+    boardImage.src = image;
+    boardImage.alt = getFactionName(player.getFaction()) + ' faction board';
+    boardImage.title = getFactionName(player.getFaction()) + ' faction board';
+    boardImage.style.position = 'absolute';
+    boardImage.style.left = Math.floor((width - 600) / 2) + 'px';
+    boardImage.style.top = '7px';
+    boardImage.style.width = '600px';
+    boardImage.style.height = '386px';
+    boardImage.style.objectFit = 'contain';
+    boardImage.style.filter = 'drop-shadow(0 3px 4px rgba(55,39,24,.26))';
   }
 
-  var boardImage = makeElement(boardPanel, 'img');
-  boardImage.src = image;
-  boardImage.alt = getFactionName(player.getFaction()) + ' faction board';
-  boardImage.title = getFactionName(player.getFaction()) + ' faction board';
-  boardImage.style.position = 'absolute';
-  boardImage.style.left = Math.floor((width - 600) / 2) + 'px';
-  boardImage.style.top = '7px';
-  boardImage.style.width = '600px';
-  boardImage.style.height = '386px';
-  boardImage.style.objectFit = 'contain';
-  boardImage.style.filter = 'drop-shadow(0 3px 4px rgba(55,39,24,.26))';
-
   // The player card stays over the board so its fixed 260px width does not
-  // compete with the fixed-size faction-board image.
+  // compete with the fixed-size faction-board image. It is also the live
+  // replacement when an expansion board's reference artwork is unavailable.
   drawCompactPlayerPanel(px + 24, py + 68, 260, player);
 
   // Claimed tiles belong with the human player's faction board, not in the
