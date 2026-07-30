@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Usage: node benchmark.js --pairs 100 --seed 12345 [--quiet] [--verbose] [--json]
+// Usage: node benchmark.js --pairs 100 --seed 12345 [--expect-equivalent] [--verify-reproducibility] [--quiet] [--verbose] [--json]
 
 var fs = require('fs');
 var path = require('path');
@@ -63,10 +63,12 @@ function loadSources(context) {
 }
 
 function parseArgs(argv) {
-  var options = {pairs: 1, seed: 1, json: false, quiet: false, verbose: false};
+  var options = {pairs: 1, seed: 1, expectEquivalent: false, verifyReproducibility: false, json: false, quiet: false, verbose: false};
   for(var i = 0; i < argv.length; i++) {
     if(argv[i] == '--pairs') options.pairs = Number(argv[++i]);
     else if(argv[i] == '--seed') options.seed = Number(argv[++i]);
+    else if(argv[i] == '--expect-equivalent') options.expectEquivalent = true;
+    else if(argv[i] == '--verify-reproducibility') options.verifyReproducibility = true;
     else if(argv[i] == '--json') options.json = true;
     else if(argv[i] == '--quiet') options.quiet = true;
     else if(argv[i] == '--verbose') options.verbose = true;
@@ -141,9 +143,27 @@ function formatBuckets(title, buckets) {
   return lines;
 }
 
+function formatNumber(value) {
+  return value == null ? 'n/a' : value.toFixed(2);
+}
+
+function formatPairedBuckets(title, buckets) {
+  var lines = [title + ':'];
+  var keys = Object.keys(buckets).sort();
+  for(var i = 0; i < keys.length; i++) {
+    var value = buckets[keys[i]];
+    lines.push('  ' + keys[i] + ': paired samples ' + value.samples +
+        ', L5 wins ' + value.l5Wins + ', L6 wins ' + value.l6Wins + ', ties ' + value.ties +
+        ', mean delta ' + formatNumber(value.meanVpDelta) +
+        ', L5 VP ' + value.l5Vp + ', L6 VP ' + value.l6Vp);
+  }
+  return lines;
+}
+
 function formatReport(report) {
   var lines = [
     'Terra Mystica AI benchmark',
+    'mode: ' + report.mode,
     'seed: ' + report.seed,
     'scenarios: ' + report.scenarios,
     'games: ' + report.games + ' (' + report.completedGames + ' completed)',
@@ -153,21 +173,39 @@ function formatReport(report) {
     'average VP L5: ' + report.averageVpL5.toFixed(2),
     'average VP L6: ' + report.averageVpL6.toFixed(2),
     'average VP difference (L6 - L5): ' + report.averageVpDifference.toFixed(2),
+    'paired scenarios: ' + report.paired.completedScenarios + '/' + report.scenarios,
+    'paired scenario results: L5 wins ' + report.paired.l5Wins + ', L6 wins ' + report.paired.l6Wins + ', ties ' + report.paired.ties,
+    'mean paired VP delta (L6 - L5): ' + formatNumber(report.paired.meanVpDelta),
+    'median paired VP delta (L6 - L5): ' + formatNumber(report.paired.medianVpDelta),
+    'paired VP delta standard deviation: ' + formatNumber(report.paired.standardDeviation),
+    'paired VP delta standard error: ' + formatNumber(report.paired.standardError),
+    'approximate 95% CI for mean paired VP delta: [' + formatNumber(report.paired.confidence95.low) + ', ' + formatNumber(report.paired.confidence95.high) + ']',
+    'paired VP delta range: [' + formatNumber(report.paired.minVpDelta) + ', ' + formatNumber(report.paired.maxVpDelta) + ']',
+    'decision-trace mismatches: ' + report.comparisons.traceMismatches,
+    'final-outcome mismatches: ' + report.comparisons.outcomeMismatches,
+    'unavailable comparisons: ' + report.comparisons.unavailable,
+    'reproducibility checks: ' + report.reproducibility.checkedGames + ', failures: ' + report.reproducibility.failures.length,
     'rejected/illegal AI actions: ' + report.rejectedActions,
     'crashes: ' + report.crashes.length,
-    'baseline equivalence: ' + report.equivalence.passed + '/' + report.scenarios + ' paired scenarios matched',
-    'runtime: ' + (report.runtimeMs / 1000).toFixed(3) + 's'
+    'trace/outcome equivalence: ' + report.equivalence.passed + '/' + report.scenarios + ' paired scenarios matched',
+    'runtime: ' + (report.runtimeMs / 1000).toFixed(3) + 's',
+    'games per second: ' + report.gamesPerSecond.toFixed(2)
   ];
   lines = lines.concat(formatBuckets('by faction', report.byFaction));
   lines = lines.concat(formatBuckets('by seat', report.bySeat));
-  if(report.equivalence.failed.length) lines.push('equivalence failures: ' + report.equivalence.failed.length + ' (use --json for details)');
+  lines = lines.concat(formatPairedBuckets('paired result by faction', report.pairedByFaction));
+  lines = lines.concat(formatPairedBuckets('paired result by seat', report.pairedBySeat));
+  if(report.equivalence.failed.length) {
+    lines.push((report.mode == 'equivalence' ? 'equivalence failures: ' : 'behavioral differences: ') +
+        report.equivalence.failed.length + ' (use --json for details)');
+  }
   return lines.join('\n');
 }
 
 function main() {
   var options = parseArgs(process.argv.slice(2));
   if(options.help) {
-    console.log('Usage: node benchmark.js --pairs <positive integer> --seed <integer> [--quiet] [--verbose] [--json]');
+    console.log('Usage: node benchmark.js --pairs <positive integer> --seed <integer> [--expect-equivalent] [--verify-reproducibility] [--quiet] [--verbose] [--json]');
     return;
   }
   var context = createBenchmarkContext();
@@ -175,11 +213,16 @@ function main() {
   var report = context.runBenchmark({
     pairs: options.pairs,
     seed: options.seed,
+    expectEquivalent: options.expectEquivalent,
+    verifyReproducibility: options.verifyReproducibility,
     onProgress: createProgressReporter(options),
     onError: createErrorReporter()
   });
   console.log(options.json ? JSON.stringify(report, null, 2) : formatReport(report));
-  if(report.crashes.length || report.equivalence.failed.length) process.exitCode = 1;
+  if(report.crashes.length || report.rejectedActions || report.reproducibility.failures.length ||
+      (options.expectEquivalent && report.equivalence.failed.length)) {
+    process.exitCode = 1;
+  }
 }
 
 try {

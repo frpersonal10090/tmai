@@ -105,6 +105,13 @@ var onClearHumanState = []; //e.g. for queueHumanState
 function clearHumanState() {
   var wasMapTargetSelection = humanstate == HS_MAP;
   humanstate = HS_MAIN;
+  // The all-actions chooser is presentation only. Any transition into or out
+  // of a focused board choice must leave it closed, so it cannot reappear on
+  // a later redraw after a map, cult, or tile choice is resolved.
+  if(typeof allActionsPopupOpen != 'undefined') {
+    allActionsPopupOpen = false;
+    actionDrawer = '';
+  }
   clearHelp();
   mapClickFun = null;
   tileClickFun = null;
@@ -366,20 +373,33 @@ function makeChoicePopup(title, subtitle, width, height) {
   panel.style.boxShadow = '0 5px 12px rgba(40,25,12,.34), inset 0 0 0 1px rgba(255,255,255,.6)';
   panel.style.zIndex = 2001;
 
-  var heading = makeText(panelX + 13, panelY + 11, title, popupElement);
+  // Reserve two explicit header lines before any choices. Bare absolutely
+  // positioned text uses shrink-to-fit sizing, which can wrap long titles on
+  // iPad and collide with the first row of buttons.
+  var heading = makeSizedDiv(panelX + 14, panelY + 10, width - 28, 20, popupElement);
   heading.style.color = '#4d3020';
   heading.style.fontFamily = 'Georgia, serif';
   heading.style.fontSize = '17px';
   heading.style.fontWeight = 'bold';
+  heading.style.lineHeight = '20px';
+  heading.style.overflow = 'hidden';
+  heading.style.textOverflow = 'ellipsis';
+  heading.style.whiteSpace = 'nowrap';
+  heading.innerHTML = title;
   heading.style.zIndex = 2002;
   if(subtitle) {
-    var hint = makeText(panelX + 14, panelY + 33, subtitle, popupElement);
+    var hint = makeSizedDiv(panelX + 14, panelY + 34, width - 28, 15, popupElement);
     hint.style.color = '#70513c';
     hint.style.fontSize = '10px';
+    hint.style.lineHeight = '13px';
+    hint.style.overflow = 'hidden';
+    hint.style.whiteSpace = 'nowrap';
+    hint.style.textOverflow = 'ellipsis';
+    hint.innerHTML = subtitle;
     hint.style.zIndex = 2002;
   }
   makeGameplayPopupDragHandle(panelX, panelY, width);
-  return {panel: panel, x: panelX, y: panelY, width: width, height: height};
+  return {panel: panel, x: panelX, y: panelY, width: width, height: height, contentY: panelY + 59};
 }
 
 function makeChoicePopupButton(panelInfo, x, y, width, label, color, click) {
@@ -421,7 +441,7 @@ function chooseActionColor(action) {
     if(!already[i]) colors.push(i);
   }
   var colorRows = Math.ceil(colors.length / 2);
-  var popup = makeChoicePopup('Shift terrain', 'Choose the new terrain color for this action.', 438, 70 + colorRows * 39);
+  var popup = makeChoicePopup('Shift terrain', 'Choose the new terrain color for this action.', 438, 74 + colorRows * 39);
   var clickFun = function(color) {
     clearHumanState();
     action.color = color;
@@ -430,7 +450,7 @@ function chooseActionColor(action) {
   for(var j = 0; j < colors.length; j++) {
     var column = j % 2;
     var row = Math.floor(j / 2);
-    makeChoicePopupButton(popup, popup.x + 13 + column * 206, popup.y + 56 + row * 39, 194,
+    makeChoicePopupButton(popup, popup.x + 13 + column * 206, popup.contentY + row * 39, 194,
         getColorName(colors[j]), getImageColor(colors[j]), bind(clickFun, colors[j]));
   }
   queueHumanState(HS_MAP, 'choose color', null);
@@ -468,6 +488,7 @@ var clearPlannedActions = function() {
   pactions = [];
   updateActionPlanSummary();
   setHelp('Turn plan cleared.');
+  drawHud();
 };
 
 function saveUndoState(undoGameState) {
@@ -482,13 +503,13 @@ Human.prototype.doAction = function(playerIndex, callback) {
     var undoGameState = saveGameState(game, state, logText)
     actionEl.innerHTML = '';
     var error = callback(playerIndex, pactions);
-    // tryActions restores the game state on failure. Keep the draft too, so
-    // the player can turn auto-run off and add the required turn action (for
-    // example after starting with a resource conversion).
-    if(error == '') pactions = [];
+    // tryActions restores the game state on failure. A rejected sequence is
+    // no longer playable, so discard it and let the player start a new plan.
+    pactions = [];
     updateActionPlanSummary();
     if(error != '') {
       setHelp('Execute action error: ' + error);
+      drawHud();
     } else {
       executeButtonFun_ = null;
       executeButtonClearFun_ = null;
@@ -499,6 +520,7 @@ Human.prototype.doAction = function(playerIndex, callback) {
     pactions.pop();
     actionEl.innerHTML = actionsToString(pactions);
     updateActionPlanSummary();
+    drawHud();
   };
 };
 
@@ -715,16 +737,16 @@ Human.chooseColorDialog = function(playerIndex, callback) {
   var colorRows = Math.ceil(colors.length / 2);
   var title = ispriestcolor ? 'Choose priest or terrain' : 'Choose terrain color';
   var subtitle = ispriestcolor ? 'Unlock a terrain color, or use the priest option.' : 'Choose an available terrain color for this faction.';
-  var popup = makeChoicePopup(title, subtitle, 438, ispriestcolor ? 108 + colorRows * 39 : 70 + colorRows * 39);
+  var popup = makeChoicePopup(title, subtitle, 438, ispriestcolor ? 112 + colorRows * 39 : 74 + colorRows * 39);
   for(var i = 0; i < colors.length; i++) {
     var column = i % 2;
     var row = Math.floor(i / 2);
-    makeChoicePopupButton(popup, popup.x + 13 + column * 206, popup.y + 56 + row * 39, 194,
+    makeChoicePopupButton(popup, popup.x + 13 + column * 206, popup.contentY + row * 39, 194,
         getColorName(colors[i]), getImageColor(colors[i]), bind(buttonClickFun, colors[i]));
   }
   if(ispriestcolor) {
     var priestRow = colorRows;
-    makeChoicePopupButton(popup, popup.x + 13, popup.y + 56 + priestRow * 39, 194,
+    makeChoicePopupButton(popup, popup.x + 13, popup.contentY + priestRow * 39, 194,
         'AS PRIEST', '#d9d5c6', bind(buttonClickFun, Z));
   }
 };
@@ -793,15 +815,20 @@ Human.prototype.leechPower = function(playerIndex, fromPlayer, amount, vpcost, r
   heading.style.fontFamily = 'Georgia, serif';
   heading.style.fontSize = '25px';
   heading.style.fontWeight = 'bold';
+  heading.style.whiteSpace = 'nowrap';
   heading.style.zIndex = 2002;
-  // Keep this line inside the panel. Player names are both redundant here and
-  // can make the notification extend past the left edge after the panel moves.
-  var from = makeText(panelX + 24, panelY + 52,
-      getFactionName(game.players[fromPlayer].faction) + ' triggered a neighbouring building.', popupElement);
+  // Keep this line inside the panel. A source faction is helpful when known,
+  // but the prompt can also be created before one is available.
+  var sourceFaction = game.players[fromPlayer] ? getFactionName(game.players[fromPlayer].faction) : null;
+  var leechNotice = sourceFaction ?
+      sourceFaction + ' triggered a neighbouring building.' :
+      'A neighbouring building triggered this leech.';
+  var from = makeText(panelX + 24, panelY + 52, leechNotice, popupElement);
   from.style.color = '#70543a';
   from.style.fontSize = '13px';
   from.style.width = (panelW - 48) + 'px';
   from.style.lineHeight = '17px';
+  from.style.whiteSpace = 'nowrap';
   from.style.zIndex = 2002;
 
   var power = makeSizedDiv(panelX + 24, panelY + 79, 122, 42, popupElement);
@@ -820,6 +847,7 @@ Human.prototype.leechPower = function(playerIndex, fromPlayer, amount, vpcost, r
   cost.style.color = '#5c422b';
   cost.style.fontSize = '15px';
   cost.style.fontWeight = 'bold';
+  cost.style.whiteSpace = 'nowrap';
   cost.style.zIndex = 2002;
 
   var finish = function(accept, always) {
@@ -860,10 +888,6 @@ Human.prototype.leechPower = function(playerIndex, fromPlayer, amount, vpcost, r
   makeChoice(panelX + 400, 'Always accept', 'Auto-accept future leeches',
       'linear-gradient(145deg, #3fbe6a, #08713f)', '#07512f', function() { finish(true, true); }, true);
 
-  var keys = makeText(panelX + 24, panelY + 207, 'Keyboard: Y accepts once · N declines', popupElement);
-  keys.style.color = '#7a6045';
-  keys.style.fontSize = '11px';
-  keys.style.zIndex = 2002;
 };
 
 
@@ -960,9 +984,9 @@ Human.chooseShapeshiftersConversionDialog = function(playerIndex, callback) {
     clearHumanState();
     callback(playerIndex, yes);
   };
-  var popup = makeChoicePopup('Convert victory point?', 'Spend 1 VP to gain 1 power token.', 438, 119);
+  var popup = makeChoicePopup('Convert victory point?', 'Spend 1 VP to gain 1 power token.', 438, 123);
   var makeDecision = function(x, label, background, border, click) {
-    var button = makeSizedDiv(x, popup.y + 57, 194, 43, popupElement);
+    var button = makeSizedDiv(x, popup.contentY, 194, 43, popupElement);
     button.style.boxSizing = 'border-box';
     button.style.padding = '12px';
     button.style.background = background;
@@ -1170,44 +1194,54 @@ function showUpgradeChoicePopup(co, building, choices) {
     setHelp('Upgrade selection cancelled.');
   };
 
-  var panelW = 522;
-  var panelH = 102;
+  var panelW = 640;
+  var panelH = 132;
   var upgradeDock = getGameplayPopupDock(panelW, panelH);
   var panelX = upgradeDock.x;
   var panelY = upgradeDock.y;
-  var panel = makeSizedDiv(panelX, panelY, panelW, 102, popupElement);
+  var panel = makeSizedDiv(panelX, panelY, panelW, panelH, popupElement);
   panel.style.boxSizing = 'border-box';
   panel.style.background = 'linear-gradient(145deg, #fff5d8, #e3c185)';
   panel.style.border = '3px solid #69472d';
   panel.style.borderRadius = '10px';
   panel.style.boxShadow = '0 5px 12px rgba(40,25,12,.34), inset 0 0 0 1px rgba(255,255,255,.6)';
   panel.style.zIndex = 2001;
-  makeGameplayPopupDragHandle(panelX, panelY, 420);
+  makeGameplayPopupDragHandle(panelX, panelY, panelW - 116);
 
   var names = {};
   names[B_TP] = 'Trading Post';
   names[B_D] = 'Dwelling';
   names[B_TE] = 'Temple';
-  var heading = makeText(panelX + 14, panelY + 11, 'Upgrade ' + (names[building] || 'building'), popupElement);
+  // Keep the title, instruction, and choices in separate fixed rows. This
+  // prevents long building names from wrapping through the option buttons.
+  var heading = makeSizedDiv(panelX + 18, panelY + 13, panelW - 210, 24, popupElement);
   heading.style.color = '#4d3020';
   heading.style.fontFamily = 'Georgia, serif';
-  heading.style.fontSize = '17px';
+  heading.style.fontSize = '20px';
   heading.style.fontWeight = 'bold';
+  heading.style.lineHeight = '24px';
+  heading.style.overflow = 'hidden';
+  heading.style.textOverflow = 'ellipsis';
+  heading.style.whiteSpace = 'nowrap';
+  heading.innerHTML = 'Upgrade ' + (names[building] || 'building');
   heading.style.zIndex = 2002;
-  var hint = makeText(panelX + 170, panelY + 15, 'Choose its destination.', popupElement);
+  var hint = makeSizedDiv(panelX + 18, panelY + 42, panelW - 36, 15, popupElement);
   hint.style.color = '#70513c';
-  hint.style.fontSize = '10px';
+  hint.style.fontSize = '11px';
+  hint.style.lineHeight = '14px';
+  hint.style.whiteSpace = 'nowrap';
+  hint.innerHTML = 'Choose its destination.';
   hint.style.zIndex = 2002;
 
-  var cancel = makeSizedDiv(panelX + 430, panelY + 9, 76, 23, popupElement);
+  var cancel = makeSizedDiv(panelX + panelW - 104, panelY + 13, 86, 27, popupElement);
   cancel.style.boxSizing = 'border-box';
-  cancel.style.padding = '5px';
+  cancel.style.padding = '6px';
   cancel.style.background = '#f3e1b9';
   cancel.style.border = '1px solid #795838';
   cancel.style.borderRadius = '5px';
   cancel.style.color = '#4f3320';
   cancel.style.cursor = 'pointer';
-  cancel.style.fontSize = '10px';
+  cancel.style.fontSize = '12px';
   cancel.style.fontWeight = 'bold';
   cancel.style.textAlign = 'center';
   cancel.style.userSelect = 'none';
@@ -1217,9 +1251,10 @@ function showUpgradeChoicePopup(co, building, choices) {
 
   for(var i = 0; i < choices.length; i++) {
     var choice = choices[i];
-    var width = choices.length == 1 ? 240 : 230;
-    var x = choices.length == 1 ? panelX + 140 : panelX + 22 + i * 248;
-    var card = makeSizedDiv(x, panelY + 43, width, 46, popupElement);
+    var cardGap = 14;
+    var width = choices.length == 1 ? 310 : Math.floor((panelW - 30 - cardGap) / 2);
+    var x = choices.length == 1 ? panelX + Math.floor((panelW - width) / 2) : panelX + 15 + i * (width + cardGap);
+    var card = makeSizedDiv(x, panelY + 67, width, 50, popupElement);
     card.style.boxSizing = 'border-box';
     card.style.padding = '8px 11px';
     card.style.background = 'linear-gradient(145deg, #4c8da6, #2d5c70)';
@@ -1228,12 +1263,12 @@ function showUpgradeChoicePopup(co, building, choices) {
     card.style.boxShadow = '0 2px 4px rgba(27,61,73,.31), inset 0 1px 1px rgba(255,255,255,.22)';
     card.style.color = '#fff8e5';
     card.style.cursor = 'pointer';
-    card.style.fontSize = '13px';
+    card.style.fontSize = '15px';
     card.style.fontWeight = 'bold';
     card.style.textAlign = 'center';
     card.style.userSelect = 'none';
     card.style.zIndex = 2002;
-    card.innerHTML = choice.label + ' <span style="font-size:10px">(' + choice.short + ')</span><div style="font-size:9px;font-weight:normal">Add to turn plan</div>';
+    card.innerHTML = choice.label + ' <span style="font-size:12px">(' + choice.short + ')</span><div style="font-size:10px;font-weight:normal">Add to turn plan</div>';
     card.onclick = (function(selected) { return function() {
       popupElement.innerHTML = '';
       var action = new Action(selected.type);

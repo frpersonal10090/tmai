@@ -1179,6 +1179,75 @@ function testAILevel6MatchesLevel5SelectedActions() {
   }
 }
 
+function testHumanClearsTurnPlanAfterRejectedExecution() {
+  createAILouCharacterizationFixture(5);
+  pactions = [new Action(A_PASS)];
+  var plannedActions;
+  var errorMessage = '';
+  var previousSetHelp = setHelp;
+
+  setHelp = function(message) { errorMessage = message; };
+  try {
+    var human = new Human();
+    human.doAction(0, function(playerIndex, actions) {
+      plannedActions = actions;
+      return 'the planned action is illegal';
+    });
+    executeButtonFun();
+
+    expectEqual(1, plannedActions.length);
+    expectEqual(0, pactions.length);
+    expectEqual('Execute action error: the planned action is illegal', errorMessage);
+  } finally {
+    setHelp = previousSetHelp;
+    pactions = [];
+    executeButtonFun_ = null;
+    executeButtonClearFun_ = null;
+  }
+}
+
+function testPendingConversionResourcePreview() {
+  var player = createAILouCharacterizationFixture(5);
+  player.c = 10;
+  player.w = 4;
+  player.p = 1;
+  player.pp = 7;
+  player.pw0 = 3;
+  player.pw1 = 4;
+  player.pw2 = 9;
+  player.vp = 20;
+
+  var preview = getPendingConversionResourcePreview(player, [
+    new Action(A_CONVERT_1PW_1C),
+    new Action(A_CONVERT_3PW_1W),
+    new Action(A_CONVERT_5PW_1P),
+    new Action(A_CONVERT_1P_1W),
+    new Action(A_CONVERT_1W_1C)
+  ]);
+
+  expectEqual(true, preview.changed);
+  expectEqual(false, preview.invalid);
+  expectEqual(12, preview.resources.c);
+  expectEqual(5, preview.resources.w);
+  expectEqual(1, preview.resources.p);
+  expectEqual(0, preview.resources.pw2);
+  // The card preview must not mutate the actual player before execution.
+  expectEqual(10, player.c);
+  expectEqual(4, player.w);
+  expectEqual(9, player.pw2);
+
+  player.pw1 = 2;
+  player.pw2 = 0;
+  preview = getPendingConversionResourcePreview(player, [new Action(A_BURN), new Action(A_CONVERT_1PW_1C)]);
+  expectEqual(false, preview.invalid);
+  expectEqual(0, preview.resources.pw1);
+  expectEqual(0, preview.resources.pw2);
+  expectEqual(11, preview.resources.c);
+
+  preview = getPendingConversionResourcePreview(player, [new Action(A_CONVERT_1PW_1C)]);
+  expectEqual(true, preview.invalid);
+}
+
 function testSaveRestoreRoundTripForSimulationState() {
   var player = createAILouCharacterizationFixture(5);
 
@@ -1372,6 +1441,8 @@ function runAILouInfrastructureCharacterizationTests() {
   results.push(runCharacterizationTest('AILevel6 level and class survive save/load snapshots', testAILevel6SurvivesSaveGameStateAndLoadGameState));
   results.push(runCharacterizationTest('AILevel6 level and class survive serialized save/load', testAILevel6SurvivesSerializedSaveAndLoad));
   results.push(runCharacterizationTest('AILevel6 matches Level 5 selected actions in deterministic states', testAILevel6MatchesLevel5SelectedActions));
+  results.push(runCharacterizationTest('human turn plan clears after a rejected execution', testHumanClearsTurnPlanAfterRejectedExecution));
+  results.push(runCharacterizationTest('planned conversion resource previews are pure and sequenced', testPendingConversionResourcePreview));
   results.push(runCharacterizationTest('save/load round-trips simulation-relevant game and state fields', testSaveRestoreRoundTripForSimulationState));
   results.push(runCharacterizationTest('saved snapshots remain independent and reusable after repeated loads', testSavedSnapshotRemainsIndependentAndReusable));
 

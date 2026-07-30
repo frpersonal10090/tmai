@@ -1317,7 +1317,11 @@ function renderRoundTile(px, py, tile, details, index, scale, parent) {
   var leftZoneCenter = tileInnerX + (tileArrowX - tileInnerX) / 2;
   var rightZoneCenter = tileArrowX + arrowWidth + (tileInnerRight - (tileArrowX + arrowWidth)) / 2;
 
-  drawTileIcon(Math.round(leftZoneCenter - 17 / 2), drawY + 6, details.trigger, drawParent, false);
+  var triggerIcon = drawTileIcon(Math.round(leftZoneCenter - 17 / 2), drawY + 6,
+      details.trigger, drawParent, false);
+  // The town badge is only this narrow in the round-scoring tile. Use its
+  // compact abbreviation here without changing town labels elsewhere.
+  if(details.trigger == 'town') triggerIcon.innerHTML = 'TWN';
   if(details.triggerLabel) {
     var triggerLabel = makeSizedDiv(drawX + 4, drawY + 21, 24, 7, drawParent);
     styleBonusTileText(triggerLabel, 5, 'bold', '#f5ecd1');
@@ -1347,11 +1351,6 @@ function renderRoundTile(px, py, tile, details, index, scale, parent) {
     drawTileArrow(tileArrowX, drawY + 36, drawParent);
     drawTileReward(Math.round(rightZoneCenter - 12 / 2), drawY + 34, details.reward, drawParent);
   }
-
-  var roundLabel = makeSizedDiv(drawX + 2, drawY - 12, 66, 10, drawParent);
-  styleBonusTileText(roundLabel, 8, 'bold', '#493f38');
-  roundLabel.style.textAlign = 'left';
-  roundLabel.innerHTML = 'ROUND ' + index;
 
   return [71 * scale, 61 * scale];
 }
@@ -1679,10 +1678,10 @@ function getPlayerResourcesString(player, markup) {
   return result;
 }
 
-function drawPlayerDashboardToken(px, py, icon, text, labelWidth) {
+function drawPlayerDashboardToken(px, py, icon, text, labelWidth, optLabelColor) {
   drawBonusGlyph(px, py, icon, hudElement, true);
   var label = makeSizedDiv(px + 14, py + 2, labelWidth || 38, 11, hudElement);
-  label.style.color = '#49311f';
+  label.style.color = optLabelColor || '#49311f';
   label.style.fontSize = '9px';
   label.style.fontWeight = 'bold';
   label.style.whiteSpace = 'nowrap';
@@ -1694,6 +1693,11 @@ function drawPlayerDashboardToken(px, py, icon, text, labelWidth) {
 // state: every terrain colour has the same treatment.
 function drawTerrainColorWheel(px, py, width, height, parent) {
   var wheel = makeSizedDiv(px, py, width, height, parent);
+  wheel.style.boxSizing = 'border-box';
+  wheel.style.border = '2px solid #6d4a2f';
+  wheel.style.borderRadius = '9px';
+  wheel.style.background = 'linear-gradient(145deg, #fff8e5, #e6c98e)';
+  wheel.style.boxShadow = '0 2px 4px rgba(55,35,18,.18), inset 0 1px 0 rgba(255,255,255,.62)';
   wheel.style.pointerEvents = 'none';
 
   // Use the entire available right-hand column. The ring is sized from its
@@ -1720,6 +1724,12 @@ function drawCompactPlayerPanel(px, py, width, player) {
   var current = player.index == state.currentPlayer;
   var factionColor = getImageColor(player.woodcolor);
   var factionText = getHighContrastColor(factionColor);
+  // Pending conversions are intentionally projected only for the human's
+  // faction card. The projection is a visual aid: the player itself is still
+  // changed only by the rules engine when the entire turn is executed.
+  var conversionPreview = player.human && pactions.length ? getPendingConversionResourcePreview(player, pactions) : null;
+  var showingPlannedResources = conversionPreview && conversionPreview.changed && !conversionPreview.invalid;
+  var displayedResources = showingPlannedResources ? conversionPreview.resources : player;
   var bg = makeSizedDiv(px, py, width, 112, hudElement);
   bg.style.boxSizing = 'border-box';
   bg.style.border = current ? '3px solid #8d6332' : '1px solid #765439';
@@ -1748,6 +1758,22 @@ function drawCompactPlayerPanel(px, py, width, player) {
     statusBadge.innerHTML = status;
   }
 
+  if(showingPlannedResources) {
+    var plannedBadge = makeSizedDiv(px + 53, py + 29, 54, 10, hudElement);
+    plannedBadge.style.color = '#27613a';
+    plannedBadge.style.fontSize = '7px';
+    plannedBadge.style.fontWeight = 'bold';
+    plannedBadge.title = 'These resources include pending conversions. Nothing is spent until the full turn executes successfully.';
+    plannedBadge.innerHTML = 'PLANNED';
+  } else if(conversionPreview && conversionPreview.invalid) {
+    var planErrorBadge = makeSizedDiv(px + 53, py + 29, 68, 10, hudElement);
+    planErrorBadge.style.color = '#9d342d';
+    planErrorBadge.style.fontSize = '7px';
+    planErrorBadge.style.fontWeight = 'bold';
+    planErrorBadge.title = 'A pending conversion cannot be paid with the projected resources.';
+    planErrorBadge.innerHTML = 'CHECK PLAN';
+  }
+
   var vp = makeSizedDiv(px + width - 39, py + 29, 31, 20, hudElement);
   vp.style.boxSizing = 'border-box';
   vp.style.padding = '3px 1px';
@@ -1760,14 +1786,19 @@ function drawCompactPlayerPanel(px, py, width, player) {
   vp.style.fontWeight = 'bold';
   vp.style.lineHeight = '12px';
   vp.style.textAlign = 'center';
-  vp.title = getFullVPDetailsText(player);
-  vp.innerHTML = player.vp;
+  vp.title = (showingPlannedResources ? 'Planned VP: ' + displayedResources.vp + ' (actual: ' + player.vp + '). Values apply only if this turn executes successfully.\n\n' : '') + getFullVPDetailsText(player);
+  vp.innerHTML = displayedResources.vp;
   vp.onclick = bind(showGreyDialogAtMouse, getFullVPDetailsText(player));
 
-  drawPlayerDashboardToken(px + 8, py + 43, 'coin', player.c + ' C', 32);
-  drawPlayerDashboardToken(px + 52, py + 43, 'worker', player.w + ' W', 32);
-  drawPlayerDashboardToken(px + 98, py + 43, 'priest', player.p + '/' + player.pp + ' P', 40);
-  drawPlayerDashboardToken(px + 153, py + 43, 'power', player.pw0 + '/' + player.pw1 + '/' + player.pw2 + ' PW', 58);
+  var resourceLabelColor = showingPlannedResources ? '#27613a' : null;
+  // The main-screen card is deliberately wider than the small opponent
+  // cards. Spread its resources across the available line rather than leaving
+  // the useful information bunched into its left edge.
+  var widePanel = width >= 340;
+  drawPlayerDashboardToken(px + (widePanel ? 12 : 8), py + 43, 'coin', displayedResources.c + ' C', widePanel ? 50 : 32, resourceLabelColor);
+  drawPlayerDashboardToken(px + (widePanel ? 84 : 52), py + 43, 'worker', displayedResources.w + ' W', widePanel ? 50 : 32, resourceLabelColor);
+  drawPlayerDashboardToken(px + (widePanel ? 156 : 98), py + 43, 'priest', displayedResources.p + '/' + displayedResources.pp + ' P', widePanel ? 64 : 40, resourceLabelColor);
+  drawPlayerDashboardToken(px + (widePanel ? 241 : 153), py + 43, 'power', displayedResources.pw0 + '/' + displayedResources.pw1 + '/' + displayedResources.pw2 + ' PW', widePanel ? 80 : 58, resourceLabelColor);
 
   var buildings = makeSizedDiv(px + 8, py + 60, width - 16, 12, hudElement);
   buildings.style.color = '#51351f';
@@ -1782,20 +1813,30 @@ function drawCompactPlayerPanel(px, py, width, player) {
   var travel = player.maxtunnelcarpetdistance > 0 ? 'RANGE ' + player.tunnelcarpetdistance + '/' + player.maxtunnelcarpetdistance : 'SHIP ' + getShipping(player, false) + '/' + player.maxshipping;
   advances.innerHTML = 'DIG ' + player.digging + '/' + player.maxdigging + ' · ' + travel;
 
-  var income = getIncome(player, player.passed, state.round);
-  var dangerp = income[2] > player.pp - player.p;
-  var dangerpw = income[3] > player.pw0 * 2 + player.pw1;
   var incomeBar = makeSizedDiv(px + 4, py + 88, width - 8, 19, hudElement);
   incomeBar.style.boxSizing = 'border-box';
   incomeBar.style.padding = '4px 6px';
-  incomeBar.style.border = '1px solid #577244';
   incomeBar.style.borderRadius = '5px';
-  incomeBar.style.background = 'linear-gradient(145deg, #dceec8, #9fbe7e)';
-  incomeBar.style.color = '#294522';
   incomeBar.style.fontSize = '8px';
   incomeBar.style.fontWeight = 'bold';
-  incomeBar.innerHTML = 'NEXT +' + income[0] + ' C  +' + income[1] + ' W  +' +
-      dangerColor(dangerp, income[2] + ' P') + '  +' + dangerColor(dangerpw, income[3] + ' PW');
+  if(state.round == 6) {
+    // Income is never collected after the sixth round. Keep the final card
+    // line calm and informative instead of displaying a misleading NEXT row.
+    incomeBar.style.border = '1px solid #886a45';
+    incomeBar.style.background = 'linear-gradient(145deg, #f0e0ba, #d4b377)';
+    incomeBar.style.color = '#5a4028';
+    incomeBar.style.textAlign = 'center';
+    incomeBar.innerHTML = 'FINAL ROUND';
+  } else {
+    var income = getIncome(player, player.passed, state.round);
+    var dangerp = income[2] > player.pp - player.p;
+    var dangerpw = income[3] > player.pw0 * 2 + player.pw1;
+    incomeBar.style.border = '1px solid #577244';
+    incomeBar.style.background = 'linear-gradient(145deg, #dceec8, #9fbe7e)';
+    incomeBar.style.color = '#294522';
+    incomeBar.innerHTML = 'NEXT +' + income[0] + ' C  +' + income[1] + ' W  +' +
+        dangerColor(dangerp, income[2] + ' P') + '  +' + dangerColor(dangerpw, income[3] + ' PW');
+  }
 }
 
 function drawPlayerPanel(px, py, player, scoreProjection, compactWidth) {
@@ -1929,12 +1970,24 @@ function drawPlayerPanel(px, py, player, scoreProjection, compactWidth) {
   co = drawTilesMap(px + 320 + px2, py + 10 + py2, player.towntiles, 600 - px2, px + 320, null);
 }
 
-// The public scoring strip is the first thing below the board. Actions follow,
-// then the active player's faction board and the other faction cards.
+// The public scoring strip is the first thing below the board. It holds only
+// the tiles plus a small surround, keeping the action controls close above the
+// fold. Actions follow, then the active player's faction board and the other
+// faction cards.
 var ROUND_SCORING_TOP = 540;
-var ROUND_SCORING_PANEL_HEIGHT = 178;
-var ACTIONS_TOP = 730;
-var USER_FACTION_BOARD_TOP = 900;
+var ROUND_SCORING_PANEL_HEIGHT = 122;
+var ROUND_SCORING_TILE_SCALE = 1.7;
+var ROUND_SCORING_TILE_GAP = 8;
+var ROUND_SCORING_TILE_WIDTH = Math.round(70 * ROUND_SCORING_TILE_SCALE);
+// The panel ends just after the final-scoring tile, with the same small
+// breathing room as above and below the tile row.
+var ROUND_SCORING_PANEL_WIDTH = 5 + ROUND_SCORING_TILE_WIDTH * 7 + ROUND_SCORING_TILE_GAP * 6 + 10;
+var QUICK_CONVERT_PANEL_X = ROUND_SCORING_PANEL_WIDTH + 8;
+var QUICK_CONVERT_PANEL_WIDTH = GAMEPLAY_WIDTH - QUICK_CONVERT_PANEL_X - 5;
+// Keep the final above-the-fold control band close to scoring, with just
+// enough breathing room for the two framed rows to remain distinct.
+var ACTIONS_TOP = ROUND_SCORING_TOP - 10 + ROUND_SCORING_PANEL_HEIGHT + 8;
+var USER_FACTION_BOARD_TOP = ACTIONS_TOP + 170;
 var USER_FACTION_BOARD_HEIGHT = 540;
 var PLAYER_PANEL_TOP = USER_FACTION_BOARD_TOP + 23 + USER_FACTION_BOARD_HEIGHT + 35;
 var PLAYER_PANEL_HEIGHT = 112;
@@ -2096,27 +2149,115 @@ function drawUserFactionBoard(px, py, width) {
   }
 }
 
-// Six round tiles plus final scoring occupy seven equal columns. The compact
-// tiles are centered within those columns so the strip stays full width
-// without becoming visually taller than the board workspace above it.
+// The scoring tiles form one compact left-aligned run. Reserving equal columns
+// across the full gameplay area put a large, empty gap between related tiles.
 function drawRoundScoringStrip(px, py, width) {
-  var gap = 8;
-  var columnWidth = Math.floor((width - gap * 6) / 7);
-  var tileScale = Math.min(1.7, columnWidth / 70);
-  var tileWidth = Math.round(70 * tileScale);
+  var gap = ROUND_SCORING_TILE_GAP;
+  var tileScale = ROUND_SCORING_TILE_SCALE;
+  var tileWidth = ROUND_SCORING_TILE_WIDTH;
   var tileHeight = Math.round(60 * tileScale);
-  var tileY = py + 40;
+  var tileY = py;
 
-  drawTileSectionHeader(px, py, width, 'ROUND & FINAL SCORING · CURRENT ROUND ' + state.round + ' / 6');
   // Round tiles are stored with an unused zero slot so their indices match
-  // the game's 1–6 round numbers. Lay those six real tiles into columns 0–5.
+  // the game's 1–6 round numbers. Lay those six real tiles tightly from left
+  // to right, followed immediately by final scoring.
   for(var i = 1; i < game.roundtiles.length; i++) {
-    var tileX = px + (i - 1) * (columnWidth + gap) + Math.round((columnWidth - tileWidth) / 2);
+    var tileX = px + (i - 1) * (tileWidth + gap);
     drawRoundTile(tileX, tileY, game.roundtiles[i], i, tileScale);
   }
-  var finalTileX = px + 6 * (columnWidth + gap) + Math.round((columnWidth - tileWidth) / 2);
+  var finalTileX = px + 6 * (tileWidth + gap);
   drawFinalScoringTile(finalTileX, tileY, game.finalscoring, tileWidth, tileHeight);
   return tileY + tileHeight - py;
+}
+
+// The six standard conversions are frequent supporting actions. Keeping
+// their icon-first shortcuts beside scoring makes them immediately available
+// without reopening the larger action drawer each time.
+function drawQuickConversionDock() {
+  var player = getCurrentPlayer();
+  var canUse = player && player.human && state.type == S_ACTION;
+  var columns = 3;
+  var dockInset = 8;
+  var buttonGap = 6;
+  var buttonWidth = Math.floor((QUICK_CONVERT_PANEL_WIDTH - dockInset * 2 - buttonGap * (columns - 1)) / columns);
+  var buttonHeight = Math.floor((ROUND_SCORING_PANEL_HEIGHT - dockInset * 2 - buttonGap) / 2);
+  var buttons = [
+    {type: A_CONVERT_1PW_1C, amount: 1, from: 'power', to: 'coin', label: '1 PW → C', title: 'Convert 1 power to 1 coin.'},
+    {type: A_CONVERT_3PW_1W, amount: 3, from: 'power', to: 'worker', label: '3 PW → W', title: 'Convert 3 power to 1 worker.'},
+    {type: A_CONVERT_5PW_1P, amount: 5, from: 'power', to: 'priest', label: '5 PW → P', title: 'Convert 5 power to 1 priest.'},
+    {type: A_CONVERT_1P_1W, amount: 1, from: 'priest', to: 'worker', label: 'P → W', title: 'Convert 1 priest to 1 worker.'},
+    {type: A_CONVERT_1W_1C, amount: 1, from: 'worker', to: 'coin', label: 'W → C', title: 'Convert 1 worker to 1 coin.'},
+    {type: A_BURN, label: 'BURN', title: 'Burn 2 power from bowl II to move 1 power to bowl III.', burn: true}
+  ];
+  var totalButtonsWidth = columns * buttonWidth + (columns - 1) * buttonGap;
+  var startX = QUICK_CONVERT_PANEL_X + Math.floor((QUICK_CONVERT_PANEL_WIDTH - totalButtonsWidth) / 2);
+  var buttonY = ROUND_SCORING_TOP - 10 + dockInset;
+  var iconY = Math.floor((buttonHeight - 17) / 2);
+
+  for(var i = 0; i < buttons.length; i++) {
+    (function(info, index) {
+      var column = index % columns;
+      var row = Math.floor(index / columns);
+      var button = makeSizedDiv(startX + column * (buttonWidth + buttonGap),
+          buttonY + row * (buttonHeight + buttonGap),
+          buttonWidth, buttonHeight, hudElement);
+      button.style.boxSizing = 'border-box';
+      button.style.border = '2px solid ' + (canUse ? '#3c5139' : '#5b7055');
+      button.style.borderRadius = '12px';
+      button.style.background = 'radial-gradient(circle at 35% 25%, #b7c99c, #657d59 62%, #445a40)';
+      button.style.boxShadow = canUse ?
+          '0 2px 4px rgba(45,63,38,.32), inset 0 1px 1px rgba(255,255,255,.42)' :
+          'inset 0 1px 1px rgba(255,255,255,.3)';
+      button.style.opacity = canUse ? '1' : '.68';
+      button.style.cursor = canUse ? 'pointer' : 'default';
+      button.style.userSelect = 'none';
+      button.style.zIndex = 2;
+      button.title = info.title + (canUse ? '' : ' (available when it is your turn).');
+
+      if(info.burn) {
+        var burnLabel = makeSizedDiv(0, 5, buttonWidth, 13, button);
+        burnLabel.style.color = '#1b261b';
+        burnLabel.style.fontFamily = 'Georgia, serif';
+        burnLabel.style.fontSize = '11px';
+        burnLabel.style.fontWeight = 'bold';
+        burnLabel.style.letterSpacing = '.7px';
+        burnLabel.style.lineHeight = '13px';
+        burnLabel.style.pointerEvents = 'none';
+        burnLabel.style.textAlign = 'center';
+        burnLabel.innerHTML = info.label;
+
+        // Put a literal X directly over the power disc: the overlap keeps the
+        // burn symbol centered and makes the action immediately recognizable.
+        var burnIconX = Math.floor((buttonWidth - 17) / 2);
+        drawBonusGlyph(burnIconX, 25, 'power', button, false);
+        var burnMark = makeSizedDiv(burnIconX, 25, 17, 17, button);
+        burnMark.style.color = '#111711';
+        burnMark.style.fontFamily = 'Arial Black, Arial, sans-serif';
+        burnMark.style.fontSize = '13px';
+        burnMark.style.fontWeight = 'bold';
+        burnMark.style.lineHeight = '17px';
+        burnMark.style.pointerEvents = 'none';
+        burnMark.style.textAlign = 'center';
+        burnMark.innerHTML = 'X';
+      } else {
+        var conversionWidth = 49;
+        var conversionX = Math.floor((buttonWidth - conversionWidth) / 2);
+        drawBonusResourceAmount(conversionX, iconY, {icon: info.from, amount: info.amount}, button, false);
+        var arrow = drawTileArrow(conversionX + 20, iconY + 4, button);
+        arrow.style.color = '#fff8e6';
+        drawBonusResourceAmount(conversionX + 32, iconY, {icon: info.to, amount: 1}, button, false);
+      }
+
+      if(canUse) {
+        button.onclick = function() {
+          prepareAction(new Action(info.type));
+          drawHud();
+        };
+        button.onmouseover = function() { this.style.transform = 'translateY(-2px) scale(1.02)'; };
+        button.onmouseout = function() { this.style.transform = 'translateY(0)'; };
+      }
+    })(buttons[i], i);
+  }
 }
 
 //if onTileClick not null, added as onclick for the tile elements. Gets the tile as argument.
@@ -2132,6 +2273,7 @@ function drawHud2(players, onTileClickMain) {
   }
 
   drawRoundScoringStrip(5, ROUND_SCORING_TOP, GAMEPLAY_WIDTH - 10);
+  drawQuickConversionDock();
 
   drawHumanUI(5, ACTIONS_TOP, state.showResourcesPlayer);
   drawUserFactionBoard(5, USER_FACTION_BOARD_TOP, GAMEPLAY_WIDTH - 10);
@@ -2181,13 +2323,22 @@ function drawBoardWorkspaceSurfaces() {
   cultPanel.style.boxShadow = '0 6px 14px rgba(55,39,24,.24), inset 0 0 0 1px rgba(255,255,255,.55)';
   cultPanel.style.pointerEvents = 'none';
 
-  var scoringPanel = makeSizedDiv(0, ROUND_SCORING_TOP - 10, GAMEPLAY_WIDTH, ROUND_SCORING_PANEL_HEIGHT, hudElement);
+  var scoringPanel = makeSizedDiv(0, ROUND_SCORING_TOP - 10, ROUND_SCORING_PANEL_WIDTH, ROUND_SCORING_PANEL_HEIGHT, hudElement);
   scoringPanel.style.boxSizing = 'border-box';
   scoringPanel.style.border = '2px solid #624936';
   scoringPanel.style.borderRadius = '12px';
   scoringPanel.style.background = 'linear-gradient(145deg, rgba(255,248,225,.93), rgba(211,179,123,.88))';
   scoringPanel.style.boxShadow = '0 5px 12px rgba(55,39,24,.22), inset 0 0 0 1px rgba(255,255,255,.62)';
   scoringPanel.style.pointerEvents = 'none';
+
+  var quickConvertPanel = makeSizedDiv(QUICK_CONVERT_PANEL_X, ROUND_SCORING_TOP - 10,
+      QUICK_CONVERT_PANEL_WIDTH, ROUND_SCORING_PANEL_HEIGHT, hudElement);
+  quickConvertPanel.style.boxSizing = 'border-box';
+  quickConvertPanel.style.border = '2px solid #56654e';
+  quickConvertPanel.style.borderRadius = '12px';
+  quickConvertPanel.style.background = 'linear-gradient(145deg, rgba(241,246,230,.95), rgba(173,191,153,.90))';
+  quickConvertPanel.style.boxShadow = '0 5px 12px rgba(45,63,38,.20), inset 0 0 0 1px rgba(255,255,255,.62)';
+  quickConvertPanel.style.pointerEvents = 'none';
 
   var dashboardPanel = makeSizedDiv(0, PLAYER_PANEL_TOP - 30, GAMEPLAY_WIDTH, 152, hudElement);
   dashboardPanel.style.boxSizing = 'border-box';
@@ -2311,11 +2462,11 @@ function drawPowerActionRail() {
     {type: A_POWER_2SPADE, cost: 6, label: 'SPADES', reward: '2 SPADES', followUp: function() { digAndBuildFun(DBM_BUILD, 'click where to dig & build'); }}
   ];
 
-  var heading = drawTileSectionHeader(10, 52, 68, 'POWER');
-  heading.style.padding = '2px 1px';
-  heading.style.fontSize = '8px';
-  heading.style.letterSpacing = '.25px';
-  heading.style.textAlign = 'center';
+  // Start the compact action stack where its former heading sat. Equal cards
+  // and tight, repeatable gaps keep the seven-control rail visually balanced.
+  var powerActionTop = 68;
+  var powerActionGap = 3;
+  var powerActionHeight = 61;
 
   for(var i = 0; i < powerActions.length; i++) {
     (function(action, index) {
@@ -2325,7 +2476,7 @@ function drawPowerActionRail() {
       var available = player && player.getFaction().canTakeAction(player, action.type, game);
       var used = !available;
       var canUse = available && state.type == S_ACTION && player.human;
-      var card = makeSizedDiv(9, 71 + index * 67, 70, 61, hudElement);
+      var card = makeSizedDiv(9, powerActionTop + index * (powerActionHeight + powerActionGap), 70, powerActionHeight, hudElement);
       card.style.boxSizing = 'border-box';
       card.style.padding = '5px 3px';
       card.style.border = '2px solid ' + (used ? '#9b7eae' : '#41285d');
@@ -2357,6 +2508,42 @@ function drawPowerActionRail() {
         card.onmouseout = function() { this.style.transform = 'translateY(0)'; };
       }
     })(powerActions[i], i);
+  }
+
+  // ALL ACTIONS opens the complete chooser. Green is a quiet reminder that
+  // tile or faction special actions are still available this turn.
+  var canOpenActions = canOpenAllActionsPopup(player);
+  var specialActionCount = canOpenActions ? getSpecialActionCards(player).length : 0;
+  var hasSpecialActions = specialActionCount > 0;
+  var allActionsCard = makeSizedDiv(9, powerActionTop + powerActions.length * (powerActionHeight + powerActionGap),
+      70, powerActionHeight, hudElement);
+  allActionsCard.style.boxSizing = 'border-box';
+  allActionsCard.style.border = '2px solid ' + (hasSpecialActions ? '#285d38' : '#5d656d');
+  allActionsCard.style.borderRadius = '7px';
+  allActionsCard.style.background = hasSpecialActions ?
+      'linear-gradient(145deg, #a7d394, #4e8657)' : 'linear-gradient(145deg, #d2d6d9, #929aa1)';
+  allActionsCard.style.boxShadow = hasSpecialActions ?
+      '0 2px 3px rgba(28,78,43,.28), inset 0 1px 1px rgba(255,255,255,.5)' :
+      'inset 0 1px 1px rgba(255,255,255,.7), 0 2px 3px rgba(43,49,54,.18)';
+  allActionsCard.style.color = hasSpecialActions ? '#183d25' : '#293038';
+  allActionsCard.style.cursor = canOpenActions ? 'pointer' : 'default';
+  allActionsCard.style.fontSize = '9px';
+  allActionsCard.style.fontWeight = 'bold';
+  allActionsCard.style.letterSpacing = '.35px';
+  allActionsCard.style.lineHeight = '11px';
+  allActionsCard.style.display = 'flex';
+  allActionsCard.style.flexDirection = 'column';
+  allActionsCard.style.alignItems = 'center';
+  allActionsCard.style.justifyContent = 'center';
+  allActionsCard.style.textAlign = 'center';
+  allActionsCard.style.userSelect = 'none';
+  allActionsCard.title = hasSpecialActions ? specialActionCount + ' special action' + (specialActionCount == 1 ? '' : 's') + ' available. Open all actions.' :
+      (canOpenActions ? 'Open all available actions.' : 'All actions are available during your turn.');
+  allActionsCard.innerHTML = 'ALL<br>ACTIONS';
+  if(canOpenActions) {
+    allActionsCard.onclick = openAllActionsPopup;
+    allActionsCard.onmouseover = function() { this.style.transform = 'translateY(-2px)'; };
+    allActionsCard.onmouseout = function() { this.style.transform = 'translateY(0)'; };
   }
 }
 
@@ -2521,19 +2708,41 @@ function drawHumanUI(px, py, playerIndex) {
   ACTIONPANELW = 520;
   ACTIONPANELH = showingNextButtonPanel ? 150 :
       (humanstate == HS_DIG ? 180 : 150);
-  var bg = makeSizedDiv(ACTIONPANELX, ACTIONPANELY, ACTIONPANELW, ACTIONPANELH, parent).style.border = '1px solid black';
-  var actionStatusX = px + ACTIONPANELW + 12;
+  // Choice modals temporarily put the human input state into map/tile/cult
+  // mode. Keep the stable above-the-fold faction card visible behind them so
+  // the main control band does not jump while a decision is open.
+  var gameplayPopupOpen = popupElement && popupElement.innerHTML != '';
+  var showMainFactionCard = state.type == S_ACTION && player.human && !showingNextButtonPanel &&
+      (humanstate == HS_MAIN || gameplayPopupOpen);
+  // This is the last complete strip above the iPad fold: faction resources,
+  // the turn plan and message, and the terrain reference all share one clean
+  // baseline instead of leaving the former action-menu footprint empty.
+  var mainFactionCardX = px + 8;
+  var mainFactionCardY = py + 3;
+  var mainFactionCardWidth = 390;
+  var mainActionRowHeight = 112;
+  if(showMainFactionCard) {
+    // The persistent chooser moved into ALL ACTIONS. Use its former left-hand
+    // footprint for the live faction resources without removing the board copy.
+    drawCompactPlayerPanel(mainFactionCardX, mainFactionCardY, mainFactionCardWidth, player);
+  } else {
+    makeSizedDiv(ACTIONPANELX, ACTIONPANELY, ACTIONPANELW, ACTIONPANELH, parent).style.border = '1px solid black';
+  }
+  var actionStatusX = showMainFactionCard ? mainFactionCardX + mainFactionCardWidth + 12 : px + ACTIONPANELW + 12;
   var actionStatusWidth = 520;
+  var actionRowTop = showMainFactionCard ? mainFactionCardY : py - 5;
+  var actionRowHeight = showMainFactionCard ? mainActionRowHeight : ACTIONPANELH;
 
   // actionEl is a persistent root created with the old side-by-side layout.
   // Anchor the turn plan in the current action row before it is rendered.
   actionEl.style.left = actionStatusX + 'px';
-  actionEl.style.top = (py - 5) + 'px';
+  actionEl.style.top = actionRowTop + 'px';
   helpEl.style.left = actionStatusX + 'px';
-  helpEl.style.top = (py + 52) + 'px';
+  helpEl.style.top = (showMainFactionCard ? actionRowTop + 51 : py + 52) + 'px';
   helpEl.style.boxSizing = 'border-box';
   helpEl.style.width = actionStatusWidth + 'px';
-  helpEl.style.minHeight = '38px';
+  helpEl.style.minHeight = showMainFactionCard ? '52px' : '38px';
+  helpEl.style.height = showMainFactionCard ? '52px' : 'auto';
   helpEl.style.padding = '11px 10px 7px';
   helpEl.style.background = 'linear-gradient(145deg, #fff8e5, #e6c98e)';
   helpEl.style.border = '2px solid #6d4a2f';
@@ -2543,12 +2752,11 @@ function drawHumanUI(px, py, playerIndex) {
   helpEl.style.fontSize = '10px';
   helpEl.style.zIndex = 100;
 
-  // The terrain wheel is the full third column of this action/status band.
-  // Together, the action controls, status controls, and wheel now run to the
-  // same right edge as the scoring and faction-board rows.
+  // The terrain wheel completes the same final resource/plan strip and is
+  // framed to match the card and game-message surfaces beside it.
   var terrainWheelX = actionStatusX + actionStatusWidth + 8;
   var terrainWheelWidth = GAMEPLAY_WIDTH - terrainWheelX - 5;
-  drawTerrainColorWheel(terrainWheelX, py - 5, terrainWheelWidth, ACTIONPANELH, parent);
+  drawTerrainColorWheel(terrainWheelX, actionRowTop, terrainWheelWidth, actionRowHeight, parent);
 
   if(state.type == S_ACTION && player.human) drawActionPlanSummary(player);
   else {
@@ -2606,8 +2814,9 @@ function drawHumanUI(px, py, playerIndex) {
         'linear-gradient(145deg, #4e8a69, #1d5a43)', '#164634', fastestButtonFun,
         'Continue automatically for the rest of the game. You will no longer see each AI turn.');
   }
-  else if(state.type == S_ACTION && humanstate == HS_MAIN && player.human) {
-    drawPlayerActions(px, py, playerIndex, parent);
+  else if(state.type == S_ACTION && player.human && (humanstate == HS_MAIN || gameplayPopupOpen)) {
+    // ALL ACTIONS owns the category picker now; the left panel is the live
+    // faction card drawn above instead of a second persistent action menu.
   } else {
     var cx = ACTIONPANELX + ACTIONPANELW / 2;
     var cy = ACTIONPANELY + ACTIONPANELH / 2;
@@ -2833,33 +3042,137 @@ function drawActionPanelFrame(px, py, parent, height, width) {
 // separate from the game state so opening or closing a drawer can never alter
 // a pending action, score, or AI behaviour.
 var actionDrawer = '';
+var allActionsPopupOpen = false;
+// Deliberately generous on touch screens: every category remains a two-column
+// choice, but each control has a comfortably large tap area.
+var ALL_ACTIONS_POPUP_WIDTH = 640;
+var ALL_ACTIONS_POPUP_HEIGHT = 250;
+var ALL_ACTIONS_CARD_GUTTER = 10;
+var ALL_ACTIONS_CARD_GAP = 14;
+var ALL_ACTIONS_CARD_WIDTH = Math.floor((ALL_ACTIONS_POPUP_WIDTH - ALL_ACTIONS_CARD_GUTTER * 2 - ALL_ACTIONS_CARD_GAP) / 2);
+var ALL_ACTIONS_CATEGORY_CARD_HEIGHT = 39;
+var ALL_ACTIONS_CATEGORY_CARD_GAP = 7;
+var ALL_ACTIONS_DETAIL_CARD_HEIGHT = 50;
+var ALL_ACTIONS_DETAIL_CARD_GAP = 8;
+var ALL_ACTIONS_CARD_START_Y = 55;
 
-function drawPowerActionDrawer(px, py, player, parent) {
-  drawActionPanelFrame(px - 4, py - 4, parent, 150);
+function canOpenAllActionsPopup(player) {
+  return player && player.human && state.type == S_ACTION && humanstate == HS_MAIN;
+}
 
-  drawSharedHeader(px + 7, py + 5, 116, 'POWER ACTIONS', parent);
-  var subtitle = makeText(px + 130, py + 9, 'Choose one available octagon action.', parent);
+function closeAllActionsPopup(optRedraw) {
+  allActionsPopupOpen = false;
+  actionDrawer = '';
+  popupElement.innerHTML = '';
+  if(optRedraw !== false) drawHud();
+}
+
+function getAllActionsDrawerHeight(cardCount) {
+  var rows = Math.max(1, Math.ceil(cardCount / 2));
+  return Math.max(ALL_ACTIONS_POPUP_HEIGHT,
+      ALL_ACTIONS_CARD_START_Y + rows * ALL_ACTIONS_DETAIL_CARD_HEIGHT +
+      (rows - 1) * ALL_ACTIONS_DETAIL_CARD_GAP + 16);
+}
+
+function getAllActionsPopupHeight(player) {
+  if(actionDrawer == 'power') return getAllActionsDrawerHeight(6);
+  if(actionDrawer == 'priest') return getAllActionsDrawerHeight(4);
+  if(actionDrawer == 'build') return getAllActionsDrawerHeight(2);
+  if(actionDrawer == 'upgrade') return getAllActionsDrawerHeight(1);
+  if(actionDrawer == 'special') return getAllActionsDrawerHeight(getSpecialActionCards(player).length);
+  return ALL_ACTIONS_POPUP_HEIGHT;
+}
+
+function drawAllActionsPopup() {
+  var player = getCurrentPlayer();
+  if(!allActionsPopupOpen || !canOpenAllActionsPopup(player)) {
+    if(allActionsPopupOpen) closeAllActionsPopup();
+    return;
+  }
+
+  resetGameplayPopupPosition();
+  popupElement.innerHTML = '';
+  var popupHeight = getAllActionsPopupHeight(player);
+  var dock = getGameplayPopupDock(ALL_ACTIONS_POPUP_WIDTH, popupHeight);
+  // Reuse the established chooser in the popup layer. Its categories and
+  // detail drawers stay the single source of action controls.
+  drawPlayerActions(dock.x + 5, dock.y + 5, player.index, popupElement);
+
+  var close = makeSizedDiv(dock.x + ALL_ACTIONS_POPUP_WIDTH - 98, dock.y + 9, 86, 28, popupElement);
+  close.style.boxSizing = 'border-box';
+  close.style.padding = '6px';
+  close.style.background = '#f3e1b9';
+  close.style.border = '1px solid #795838';
+  close.style.borderRadius = '5px';
+  close.style.color = '#4f3320';
+  close.style.cursor = 'pointer';
+  close.style.fontSize = '12px';
+  close.style.fontWeight = 'bold';
+  close.style.textAlign = 'center';
+  close.style.userSelect = 'none';
+  close.style.zIndex = 2002;
+  close.title = 'Close all actions.';
+  close.innerHTML = 'CLOSE';
+  close.onclick = closeAllActionsPopup;
+}
+
+function openAllActionsPopup() {
+  if(!canOpenAllActionsPopup(getCurrentPlayer())) return;
+  allActionsPopupOpen = true;
+  actionDrawer = '';
+  drawAllActionsPopup();
+}
+
+function showActionDrawer(drawer) {
+  actionDrawer = drawer;
+  if(allActionsPopupOpen) drawAllActionsPopup();
+  else drawHud();
+}
+
+function returnToActionCategories() {
+  actionDrawer = '';
+  if(allActionsPopupOpen) drawAllActionsPopup();
+  else drawHud();
+}
+
+function beginAllActionsSelection() {
+  // Action callbacks can immediately enter map/cult choice modes. Close this
+  // visual layer first so those focused controls remain the only active UI.
+  closeAllActionsPopup(false);
+}
+
+function drawAllActionsDrawerHeader(px, py, titleText, subtitleText, parent) {
+  drawSharedHeader(px + 8, py + 7, 214, titleText.toUpperCase(), parent);
+  var subtitle = makeSizedDiv(px + 10, py + 34, ALL_ACTIONS_POPUP_WIDTH - 130, 13, parent);
   subtitle.style.color = '#70513c';
-  subtitle.style.fontSize = '10px';
+  subtitle.style.fontSize = '11px';
+  subtitle.style.lineHeight = '13px';
+  subtitle.style.whiteSpace = 'nowrap';
+  subtitle.innerHTML = subtitleText;
 
-  var back = makeSizedDiv(px + 310, py + 4, 82, 24, parent);
+  var back = makeSizedDiv(px + ALL_ACTIONS_POPUP_WIDTH - 195, py + 7, 85, 28, parent);
   back.style.boxSizing = 'border-box';
-  back.style.padding = '5px';
+  back.style.padding = '6px';
   back.style.background = '#f3e1b9';
   back.style.border = '1px solid #795838';
   back.style.borderRadius = '5px';
   back.style.color = '#4f3320';
   back.style.cursor = 'pointer';
-  back.style.fontSize = '11px';
+  back.style.fontSize = '12px';
   back.style.fontWeight = 'bold';
   back.style.textAlign = 'center';
   back.style.userSelect = 'none';
   back.innerHTML = 'BACK';
   back.title = 'Return to the main action list.';
-  back.onclick = function() { actionDrawer = ''; drawHud(); };
+  back.onclick = returnToActionCategories;
+}
+
+function drawPowerActionDrawer(px, py, player, parent) {
+  drawActionPanelFrame(px - 5, py - 5, parent, getAllActionsDrawerHeight(6), ALL_ACTIONS_POPUP_WIDTH);
+  drawAllActionsDrawerHeader(px, py, 'Power actions', 'Choose one available octagon action.', parent);
 
   function selectPowerAction(type, followUp) {
-    actionDrawer = '';
+    beginAllActionsSelection();
     prepareAction(new Action(type));
     if(followUp) followUp();
     else drawHud();
@@ -2869,9 +3182,11 @@ function drawPowerActionDrawer(px, py, player, parent) {
     var available = player.getFaction().canTakeAction(player, type, game);
     var column = index % 2;
     var row = Math.floor(index / 2);
-    var card = makeSizedDiv(px + 8 + column * 195, py + 31 + row * 38, 187, 36, parent);
+    var card = makeSizedDiv(px + ALL_ACTIONS_CARD_GUTTER + column * (ALL_ACTIONS_CARD_WIDTH + ALL_ACTIONS_CARD_GAP),
+        py + ALL_ACTIONS_CARD_START_Y + row * (ALL_ACTIONS_DETAIL_CARD_HEIGHT + ALL_ACTIONS_DETAIL_CARD_GAP),
+        ALL_ACTIONS_CARD_WIDTH, ALL_ACTIONS_DETAIL_CARD_HEIGHT, parent);
     card.style.boxSizing = 'border-box';
-    card.style.padding = '3px 7px';
+    card.style.padding = '7px 10px';
     card.style.background = available ? 'linear-gradient(145deg, #8563aa, #4e3976)' : 'linear-gradient(145deg, #d6c9ba, #a99b8f)';
     card.style.border = '2px solid ' + (available ? '#392656' : '#827569');
     card.style.borderRadius = '7px';
@@ -2880,8 +3195,8 @@ function drawPowerActionDrawer(px, py, player, parent) {
     card.style.cursor = available ? 'pointer' : 'default';
     card.style.userSelect = 'none';
     card.title = available ? title : title + ' (not currently available).';
-    card.innerHTML = '<b style="font-size:12px">' + cost + ' POWER</b><span style="font-size:12px"> &rarr; ' + reward + '</span>' +
-        '<div style="font-size:8px;line-height:10px">' + (available ? 'TAKE ACTION' : 'UNAVAILABLE') + '</div>';
+    card.innerHTML = '<b style="font-size:15px">' + cost + ' POWER</b><span style="font-size:14px"> &rarr; ' + reward + '</span>' +
+        '<div style="font-size:10px;line-height:13px">' + (available ? 'TAKE ACTION' : 'UNAVAILABLE') + '</div>';
     if(available) {
       card.onclick = function() { selectPowerAction(type, followUp); };
       card.onmouseover = function() { this.style.transform = 'translateY(-2px)'; };
@@ -2901,35 +3216,19 @@ function drawPowerActionDrawer(px, py, player, parent) {
   });
 }
 
-function drawActionDrawer(px, py, titleText, subtitleText, cards, parent, keepOpen) {
-  drawActionPanelFrame(px - 4, py - 4, parent, 150);
-  drawSharedHeader(px + 7, py + 5, 116, titleText.toUpperCase(), parent);
-  var subtitle = makeText(px + 130, py + 9, subtitleText, parent);
-  subtitle.style.color = '#70513c';
-  subtitle.style.fontSize = '10px';
-  var back = makeSizedDiv(px + 310, py + 4, 82, 24, parent);
-  back.style.boxSizing = 'border-box';
-  back.style.padding = '5px';
-  back.style.background = '#f3e1b9';
-  back.style.border = '1px solid #795838';
-  back.style.borderRadius = '5px';
-  back.style.color = '#4f3320';
-  back.style.cursor = 'pointer';
-  back.style.fontSize = '11px';
-  back.style.fontWeight = 'bold';
-  back.style.textAlign = 'center';
-  back.style.userSelect = 'none';
-  back.innerHTML = keepOpen ? 'DONE' : 'BACK';
-  back.title = keepOpen ? 'Return to the main action categories when your conversions are ready.' : 'Return to the main action categories.';
-  back.onclick = function() { actionDrawer = ''; drawHud(); };
+function drawActionDrawer(px, py, titleText, subtitleText, cards, parent) {
+  drawActionPanelFrame(px - 5, py - 5, parent, getAllActionsDrawerHeight(cards.length), ALL_ACTIONS_POPUP_WIDTH);
+  drawAllActionsDrawerHeader(px, py, titleText, subtitleText, parent);
 
   for(var i = 0; i < cards.length; i++) {
     var cardInfo = cards[i];
     var column = i % 2;
     var row = Math.floor(i / 2);
-    var card = makeSizedDiv(px + 8 + column * 195, py + 31 + row * 38, 187, 36, parent);
+    var card = makeSizedDiv(px + ALL_ACTIONS_CARD_GUTTER + column * (ALL_ACTIONS_CARD_WIDTH + ALL_ACTIONS_CARD_GAP),
+        py + ALL_ACTIONS_CARD_START_Y + row * (ALL_ACTIONS_DETAIL_CARD_HEIGHT + ALL_ACTIONS_DETAIL_CARD_GAP),
+        ALL_ACTIONS_CARD_WIDTH, ALL_ACTIONS_DETAIL_CARD_HEIGHT, parent);
     card.style.boxSizing = 'border-box';
-    card.style.padding = '3px 7px';
+    card.style.padding = '7px 10px';
     card.style.background = cardInfo.available ? 'linear-gradient(145deg, #8d6ab2, #513a79)' : 'linear-gradient(145deg, #d6c9ba, #a99b8f)';
     card.style.border = '2px solid ' + (cardInfo.available ? '#392656' : '#827569');
     card.style.borderRadius = '7px';
@@ -2939,12 +3238,10 @@ function drawActionDrawer(px, py, titleText, subtitleText, cards, parent, keepOp
     card.style.userSelect = 'none';
     card.style.textAlign = 'left';
     card.title = cardInfo.title + (cardInfo.available ? '' : ' (not currently available).');
-    card.innerHTML = '<b style="font-size:11px">' + cardInfo.label + '</b><div style="font-size:8px;line-height:10px">' + cardInfo.detail + '</div>';
+    card.innerHTML = '<b style="font-size:14px">' + cardInfo.label + '</b><div style="font-size:10px;line-height:13px">' + cardInfo.detail + '</div>';
     if(cardInfo.available) {
       card.onclick = (function(info) { return function() {
-        // Conversions are commonly repeated several times in one planned
-        // turn. Leave that drawer in place so successive taps stay fast.
-        if(!keepOpen) actionDrawer = '';
+        beginAllActionsSelection();
         info.click();
       }; })(cardInfo);
       card.onmouseover = function() { this.style.transform = 'translateY(-2px)'; };
@@ -2968,28 +3265,29 @@ function makeActionCategoryButton(px, py, label, drawer, available, title, paren
   button.style.userSelect = 'none';
   button.title = title;
   button.innerHTML = label;
-  if(available) button.onclick = function() { actionDrawer = drawer; drawHud(); };
+  if(available) button.onclick = function() { showActionDrawer(drawer); };
   return button;
 }
 
-function makeActionGridButton(px, py, width, label, detail, drawer, available, tone, title, parent, click) {
-  var button = makeSizedDiv(px, py, width, 25, parent);
+function makeActionGridButton(px, py, width, label, detail, drawer, available, tone, title, parent, click, optHeight) {
+  var height = optHeight || 25;
+  var button = makeSizedDiv(px, py, width, height, parent);
   button.style.boxSizing = 'border-box';
-  button.style.padding = '4px 8px';
+  button.style.padding = height > 30 ? '8px 12px' : '4px 8px';
   button.style.background = available ? tone.background : 'linear-gradient(145deg, #d6c9ba, #a99b8f)';
   button.style.border = '2px solid ' + (available ? tone.border : '#827569');
   button.style.borderRadius = '6px';
   button.style.boxShadow = available ? '0 2px 3px rgba(44,30,18,.22), inset 0 1px 1px rgba(255,255,255,.23)' : 'inset 0 1px 1px rgba(255,255,255,.3)';
   button.style.color = available ? '#fff9e9' : '#51483f';
   button.style.cursor = available ? 'pointer' : 'default';
-  button.style.fontSize = '12px';
+  button.style.fontSize = height > 30 ? '16px' : '12px';
   button.style.fontWeight = 'bold';
   button.style.textAlign = 'left';
   button.style.userSelect = 'none';
   button.title = title + (available ? '' : ' (not currently available).');
-  button.innerHTML = label + '<span style="float:right;font-size:9px;font-weight:normal;opacity:.88">' + detail + '</span>';
+  button.innerHTML = label + '<span style="float:right;font-size:' + (height > 30 ? '12' : '9') + 'px;font-weight:normal;opacity:.88">' + detail + '</span>';
   if(available) {
-    button.onclick = click || function() { actionDrawer = drawer; drawHud(); };
+    button.onclick = click || function() { showActionDrawer(drawer); };
     button.onmouseover = function() { this.style.transform = 'translateY(-1px)'; };
     button.onmouseout = function() { this.style.transform = 'translateY(0)'; };
   }
@@ -3045,17 +3343,6 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
     drawPowerActionDrawer(px, py, player, parent);
     return;
   }
-  if(actionDrawer == 'convert') {
-    drawActionDrawer(px, py, 'Conversions', 'Stays open for repeated taps.', [
-      {label: 'BURN POWER', detail: 'Move bowl II power to bowl III', available: true, title: 'Burn one power.', click: function() { prepareAction(new Action(A_BURN)); drawHud(); }},
-      {label: '1 POWER → 1 COIN', detail: 'Spend 1 power for 1 coin', available: true, title: 'Convert power to a coin.', click: function() { prepareAction(new Action(A_CONVERT_1PW_1C)); drawHud(); }},
-      {label: '3 POWER → 1 WORKER', detail: 'Spend 3 power for 1 worker', available: true, title: 'Convert power to a worker.', click: function() { prepareAction(new Action(A_CONVERT_3PW_1W)); drawHud(); }},
-      {label: '5 POWER → 1 PRIEST', detail: 'Spend 5 power for 1 priest', available: true, title: 'Convert power to a priest.', click: function() { prepareAction(new Action(A_CONVERT_5PW_1P)); drawHud(); }},
-      {label: 'PRIEST → WORKER', detail: 'Convert 1 priest to 1 worker', available: true, title: 'Convert priest to worker.', click: function() { prepareAction(new Action(A_CONVERT_1P_1W)); drawHud(); }},
-      {label: 'WORKER → COIN', detail: 'Convert 1 worker to 1 coin', available: true, title: 'Convert worker to coin.', click: function() { prepareAction(new Action(A_CONVERT_1W_1C)); drawHud(); }}
-    ], parent, true);
-    return;
-  }
   if(actionDrawer == 'priest') {
     var autoCult = function() {
       queueHumanState(HS_CULT, 'choose which cult track to send the priest to', function(cult) {
@@ -3086,13 +3373,6 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
     ], parent);
     return;
   }
-  if(actionDrawer == 'advance') {
-    drawActionDrawer(px, py, 'Advance', 'Increase an available navigation track.', [
-      {label: 'ADVANCE DIGGING', detail: 'Improve your digging level', available: player.digging < player.maxdigging, title: 'Advance the digging track.', click: function() { prepareAction(new Action(A_ADV_DIG)); drawHud(); }},
-      {label: 'ADVANCE SHIPPING', detail: 'Improve your shipping level', available: player.shipping < player.maxshipping, title: 'Advance the shipping track.', click: function() { prepareAction(new Action(A_ADV_SHIP)); drawHud(); }}
-    ], parent);
-    return;
-  }
   if(actionDrawer == 'special') {
     drawActionDrawer(px, py, 'Special actions', 'Actions from your tiles and faction.', getSpecialActionCards(player), parent);
     return;
@@ -3105,7 +3385,7 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
     drawActionDrawer(px, py, 'Tile actions', 'Use an action printed on one of your tiles.', tileCards, parent);
     return;
   }
-  drawActionPanelFrame(px - 4, py - 4, parent, 150, 520);
+  drawActionPanelFrame(px - 5, py - 5, parent, ALL_ACTIONS_POPUP_HEIGHT, ALL_ACTIONS_POPUP_WIDTH);
 
   //an action that doesn't require coordinates or other parameters
   function addSimpleActionButton(px, py, name, actiontype) {
@@ -3126,42 +3406,62 @@ function drawPlayerActions(px, py, playerIndex, parent /*parent DOM element*/) {
   for(var powerIndex = 0; powerIndex < powerTypes.length; powerIndex++) {
     if(player.getFaction().canTakeAction(player, powerTypes[powerIndex], game)) availablePowerActions++;
   }
-  drawSharedHeader(px + 7, py + 5, 150, 'CHOOSE AN ACTION', parent);
-  var hint = makeText(px + 165, py + 8, 'Tap a category, then choose its specific action.', parent);
+  drawSharedHeader(px + 8, py + 7, 214, 'CHOOSE AN ACTION', parent);
+  // This line has its own reserved row. It must never share vertical space
+  // with the first touch targets, which previously made it appear clipped.
+  var hint = makeSizedDiv(px + 10, py + 34, ALL_ACTIONS_POPUP_WIDTH - 130, 13, parent);
   hint.style.color = '#70513c';
-  hint.style.fontSize = '10px';
+  hint.style.fontSize = '11px';
+  hint.style.lineHeight = '13px';
+  hint.style.whiteSpace = 'nowrap';
+  hint.innerHTML = 'Tap a category or a direct action.';
 
-  var compactRowsY = py + 27;
-  var hasAdvance = player.digging < player.maxdigging || player.shipping < player.maxshipping;
+  var compactRowsY = py + ALL_ACTIONS_CARD_START_Y;
   var specialCards = getSpecialActionCards(player);
   var tones = {
     power: {background: 'linear-gradient(145deg, #9474b7, #54407b)', border: '#3d2c59'},
     build: {background: 'linear-gradient(145deg, #b77a4d, #78452d)', border: '#58301f'},
     upgrade: {background: 'linear-gradient(145deg, #4d91a8, #2e6076)', border: '#23495a'},
     cult: {background: 'linear-gradient(145deg, #9c7650, #64462d)', border: '#4c331f'},
-    convert: {background: 'linear-gradient(145deg, #7f8b76, #505d4a)', border: '#3d4839'},
     advance: {background: 'linear-gradient(145deg, #4d899a, #2c5d6e)', border: '#214653'},
     special: {background: 'linear-gradient(145deg, #a36b75, #71434d)', border: '#542f38'},
     pass: {background: 'linear-gradient(145deg, #c55c4e, #86332e)', border: '#65231f'}
   };
-  var columnWidth = 244;
-  makeActionGridButton(px + 8, compactRowsY, columnWidth, 'POWER ACTIONS', availablePowerActions + ' ready', 'power', true, tones.power,
-      'Choose a power action. ' + availablePowerActions + ' currently available.', parent);
-  makeActionGridButton(px + 264, compactRowsY, columnWidth, 'BUILD & DIG', 'map action', 'build', true, tones.build,
-      'Choose a build or terrain transformation action.', parent);
-  makeActionGridButton(px + 8, compactRowsY + 29, columnWidth, 'UPGRADE', 'tap building', '', true, tones.upgrade,
-      'Tap a highlighted building. Choose its destination only when there is more than one.', parent, upgradeBuildingFun);
-  makeActionGridButton(px + 264, compactRowsY + 29, columnWidth, 'PRIEST & CULT', 'cult tracks', 'priest', true, tones.cult,
-      'Choose how to send a priest to a cult track.', parent);
-  makeActionGridButton(px + 8, compactRowsY + 58, columnWidth, 'CONVERSIONS', 'resources', 'convert', true, tones.convert,
-      'Choose a resource conversion.', parent);
-  makeActionGridButton(px + 264, compactRowsY + 58, columnWidth, 'ADVANCE', 'dig / ship', 'advance', hasAdvance, tones.advance,
-      'Advance digging or shipping.', parent);
-  makeActionGridButton(px + 8, compactRowsY + 87, columnWidth, 'SPECIAL ACTIONS', specialCards.length + ' ready', 'special', specialCards.length > 0, tones.special,
-      'Choose an action from your tiles or faction.', parent);
-  var passButton = makeActionGridButton(px + 264, compactRowsY + 87, columnWidth, 'PASS', 'end your turn', '', true, tones.pass,
-      'Pass and choose your next bonus tile.', parent);
-  passButton.onclick = function() { prepareAction(new Action(A_PASS)); };
+  var columnWidth = ALL_ACTIONS_CARD_WIDTH;
+  var secondColumnX = px + ALL_ACTIONS_CARD_GUTTER + columnWidth + ALL_ACTIONS_CARD_GAP;
+  var firstColumnX = px + ALL_ACTIONS_CARD_GUTTER;
+  var rowStep = ALL_ACTIONS_CATEGORY_CARD_HEIGHT + ALL_ACTIONS_CATEGORY_CARD_GAP;
+  makeActionGridButton(firstColumnX, compactRowsY, columnWidth, 'POWER ACTIONS', availablePowerActions + ' ready', 'power', true, tones.power,
+      'Choose a power action. ' + availablePowerActions + ' currently available.', parent, null, ALL_ACTIONS_CATEGORY_CARD_HEIGHT);
+  makeActionGridButton(secondColumnX, compactRowsY, columnWidth, 'BUILD & DIG', 'map action', 'build', true, tones.build,
+      'Choose a build or terrain transformation action.', parent, null, ALL_ACTIONS_CATEGORY_CARD_HEIGHT);
+  makeActionGridButton(firstColumnX, compactRowsY + rowStep, columnWidth, 'UPGRADE', 'tap building', '', true, tones.upgrade,
+      'Tap a highlighted building. Choose its destination only when there is more than one.', parent, function() {
+        beginAllActionsSelection();
+        upgradeBuildingFun();
+      }, ALL_ACTIONS_CATEGORY_CARD_HEIGHT);
+  makeActionGridButton(secondColumnX, compactRowsY + rowStep, columnWidth, 'PRIEST & CULT', 'cult tracks', 'priest', true, tones.cult,
+      'Choose how to send a priest to a cult track.', parent, null, ALL_ACTIONS_CATEGORY_CARD_HEIGHT);
+  makeActionGridButton(firstColumnX, compactRowsY + rowStep * 2, columnWidth, 'ADVANCE DIG', 'digging track', '',
+      player.digging < player.maxdigging, tones.advance, 'Advance the digging track.', parent, function() {
+        beginAllActionsSelection();
+        prepareAction(new Action(A_ADV_DIG));
+        drawHud();
+      }, ALL_ACTIONS_CATEGORY_CARD_HEIGHT);
+  makeActionGridButton(secondColumnX, compactRowsY + rowStep * 2, columnWidth, 'ADVANCE SHIP', 'shipping track', '',
+      player.shipping < player.maxshipping, tones.advance, 'Advance the shipping track.', parent, function() {
+        beginAllActionsSelection();
+        prepareAction(new Action(A_ADV_SHIP));
+        drawHud();
+      }, ALL_ACTIONS_CATEGORY_CARD_HEIGHT);
+  makeActionGridButton(firstColumnX, compactRowsY + rowStep * 3, columnWidth, 'SPECIAL ACTIONS', specialCards.length + ' ready', 'special', specialCards.length > 0, tones.special,
+      'Choose an action from your tiles or faction.', parent, null, ALL_ACTIONS_CATEGORY_CARD_HEIGHT);
+  var passButton = makeActionGridButton(secondColumnX, compactRowsY + rowStep * 3, columnWidth, 'PASS', 'end your turn', '', true, tones.pass,
+      'Pass and choose your next bonus tile.', parent, null, ALL_ACTIONS_CATEGORY_CARD_HEIGHT);
+  passButton.onclick = function() {
+    beginAllActionsSelection();
+    prepareAction(new Action(A_PASS));
+  };
   return;
 
   drawActionSectionLabel(px, compactRowsY, 'CONVERT', parent);

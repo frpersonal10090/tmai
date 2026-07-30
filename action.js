@@ -124,6 +124,118 @@ function isConvertOrBurnAction(action) {
   return action.type >= A_BURN && action.type <= A_CONVERT_1W_1P;
 }
 
+// Build a display-only resource snapshot for the conversions in a pending
+// human turn plan. It never touches the player or game state: the rules engine
+// remains the sole authority when the complete plan is executed.
+function getPendingConversionResourcePreview(player, actions) {
+  var resources = {
+    c: player.c,
+    w: player.w,
+    p: player.p,
+    pp: player.pp,
+    pw0: player.pw0,
+    pw1: player.pw1,
+    pw2: player.pw2,
+    vp: player.vp
+  };
+  var darklingconverts = player.darklingconverts;
+  var plannedColors = player.colors ? player.colors.slice() : [];
+  var changed = false;
+  var invalid = false;
+
+  function spendPower(amount) {
+    if(resources.pw2 < amount) return false;
+    resources.pw2 -= amount;
+    return true;
+  }
+
+  function addPriest(action) {
+    // addPriests clamps to the priest pool. A Riverwalker action that already
+    // names a terrain colour unlocks it and expands the priest pool instead.
+    if(player.color != Z) {
+      if(resources.p < resources.pp) resources.p++;
+      return true;
+    }
+
+    if(action && action.color >= CIRCLE_BEGIN && action.color <= CIRCLE_END && action.color != Z) {
+      var colorIndex = action.color - R;
+      if(plannedColors[colorIndex]) return false;
+      if(state.fireiceerrata) {
+        var coinCost = colorIsCheapForLava(action.color) ? 1 : 2;
+        if(resources.c < coinCost) return false;
+        resources.c -= coinCost;
+      }
+      plannedColors[colorIndex] = true;
+      resources.pp++;
+      return true;
+    }
+
+    // A normal priest (or the Z fallback) returns to the regular pool.
+    if(resources.p < resources.pp) resources.p++;
+    return true;
+  }
+
+  for(var i = 0; i < actions.length; i++) {
+    var action = actions[i];
+    if(!action) continue;
+
+    if(action.type == A_BURN) {
+      if(resources.pw1 < 2) { invalid = true; break; }
+      resources.pw1 -= 2;
+      resources.pw2++;
+      changed = true;
+    }
+    else if(action.type == A_CONVERT_1PW_1C) {
+      if(!spendPower(1)) { invalid = true; break; }
+      resources.c++;
+      changed = true;
+    }
+    else if(action.type == A_CONVERT_3PW_1W) {
+      if(!spendPower(3)) { invalid = true; break; }
+      resources.w++;
+      changed = true;
+    }
+    else if(action.type == A_CONVERT_5PW_1P) {
+      if(!spendPower(5)) { invalid = true; break; }
+      if(!addPriest(action)) { invalid = true; break; }
+      changed = true;
+    }
+    else if(action.type == A_CONVERT_1P_1W) {
+      if(resources.p < 1) { invalid = true; break; }
+      resources.p--;
+      resources.w++;
+      changed = true;
+    }
+    else if(action.type == A_CONVERT_1W_1C) {
+      if(resources.w < 1) { invalid = true; break; }
+      resources.w--;
+      resources.c++;
+      changed = true;
+    }
+    else if(action.type == A_CONVERT_1VP_1C) {
+      if(player.faction != F_ALCHEMISTS || resources.vp < 1) { invalid = true; break; }
+      resources.vp--;
+      resources.c++;
+      changed = true;
+    }
+    else if(action.type == A_CONVERT_2C_1VP) {
+      if(player.faction != F_ALCHEMISTS || resources.c < 2) { invalid = true; break; }
+      resources.c -= 2;
+      resources.vp++;
+      changed = true;
+    }
+    else if(action.type == A_CONVERT_1W_1P) {
+      if(darklingconverts < 1 || resources.w < 1) { invalid = true; break; }
+      darklingconverts--;
+      resources.w--;
+      if(!addPriest(action)) { invalid = true; break; }
+      changed = true;
+    }
+  }
+
+  return {resources: resources, changed: changed, invalid: invalid};
+}
+
 //whether this is a faction-specific action
 function isFactionAction(action) {
   if(action == A_CONNECT_WATER_TOWN) return true;
