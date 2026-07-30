@@ -30,6 +30,10 @@ var BOARD_MAP_WIDTH = 860;
 var BOARD_MAP_HEIGHT = 462;
 var CULT_PANEL_LEFT = BOARD_MAP_LEFT + BOARD_MAP_WIDTH + 10;
 var GAMEPLAY_WIDTH = CULT_PANEL_LEFT + 255;
+// All major tabletop surfaces above the fold share this warm frame. Buttons
+// and faction accents stay colorful inside it, but the outer structure reads
+// as one coherent board.
+var OVER_FOLD_PANEL_BORDER = '#624936';
 // Leave a clear gutter below the header, including its drop shadow, before
 // the map and its surrounding panels begin.
 var TOP_PLAY_CONTENT_Y = 60;
@@ -213,9 +217,16 @@ function popLog() {
 }
 
 function setHelp(text, extravisible) {
-  helpEl.innerHTML = text ? '<span style="display:inline-block;box-sizing:border-box;padding:2px 6px;margin:-5px 8px 0 -4px;border:1px solid #35404d;border-radius:4px;background:linear-gradient(90deg,#4e5967,#79899a);color:#fff4d6;font-size:8px;font-weight:bold;letter-spacing:.5px">GAME MESSAGE</span>' + text : '';
-  if(extravisible) helpEl.style.color = 'red';
-  else helpEl.style.color = 'black';
+  if(!text) {
+    helpEl.innerHTML = '';
+    return;
+  }
+  var messageColor = extravisible ? '#9d342d' : '#4d3524';
+  // A quiet two-line label reads as part of the parchment message panel,
+  // rather than as an unrelated dark button embedded in the sentence.
+  helpEl.innerHTML = '<div style="margin:0 0 3px;color:#765438;font-size:8px;font-weight:bold;letter-spacing:.65px;line-height:10px">GAME MESSAGE</div>' +
+      '<div style="color:' + messageColor + ';font-size:11px;font-weight:600;line-height:14px">' + text + '</div>';
+  helpEl.style.color = messageColor;
 }
 
 function clearHelp() {
@@ -1678,37 +1689,41 @@ function getPlayerResourcesString(player, markup) {
   return result;
 }
 
-function drawPlayerDashboardToken(px, py, icon, text, labelWidth, optLabelColor) {
+function drawPlayerDashboardToken(px, py, icon, text, labelWidth, optLabelColor, optFontSize) {
   drawBonusGlyph(px, py, icon, hudElement, true);
-  var label = makeSizedDiv(px + 14, py + 2, labelWidth || 38, 11, hudElement);
+  var labelHeight = optFontSize ? Math.max(14, parseInt(optFontSize, 10) + 2) : 11;
+  var label = makeSizedDiv(px + 14, py + 2, labelWidth || 38, labelHeight, hudElement);
   label.style.color = optLabelColor || '#49311f';
-  label.style.fontSize = '9px';
+  label.style.fontSize = optFontSize || '9px';
+  if(optFontSize) label.style.lineHeight = optFontSize;
   label.style.fontWeight = 'bold';
   label.style.whiteSpace = 'nowrap';
   label.innerHTML = text;
 }
 
-// A fixed terrain reference belongs beside the action and status controls,
-// rather than in the global header. It deliberately shows no player-specific
-// state: every terrain colour has the same treatment.
-function drawTerrainColorWheel(px, py, width, height, parent) {
+// A terrain reference belongs beside the action and status controls. Once a
+// faction has chosen its terrain, that color is placed at twelve o'clock so
+// the ring doubles as an immediate player-orientation cue.
+function drawTerrainColorWheel(px, py, width, height, parent, optTopColor, optRingSize) {
   var wheel = makeSizedDiv(px, py, width, height, parent);
   wheel.style.boxSizing = 'border-box';
-  wheel.style.border = '2px solid #6d4a2f';
+  wheel.style.border = '2px solid ' + OVER_FOLD_PANEL_BORDER;
   wheel.style.borderRadius = '9px';
   wheel.style.background = 'linear-gradient(145deg, #fff8e5, #e6c98e)';
   wheel.style.boxShadow = '0 2px 4px rgba(55,35,18,.18), inset 0 1px 0 rgba(255,255,255,.62)';
   wheel.style.pointerEvents = 'none';
 
-  // Use the entire available right-hand column. The ring is sized from its
-  // smaller dimension so it stays round if the column is ever resized.
-  var size = Math.min(width, height);
+  // Keep the ring stable while its surrounding panel can widen or align with
+  // nearby control rows.
+  var size = optRingSize || Math.min(width, height);
   var pipSize = Math.round(size * .24);
   var radius = Math.round((size - pipSize) / 2) - 2;
   var centerX = Math.round(width / 2);
   var centerY = Math.round(height / 2);
+  var colorCount = CIRCLE_END - CIRCLE_BEGIN + 1;
+  var topColor = optTopColor >= CIRCLE_BEGIN && optTopColor <= CIRCLE_END ? optTopColor : CIRCLE_BEGIN;
   for(var color = CIRCLE_BEGIN; color <= CIRCLE_END; color++) {
-    var offset = color - CIRCLE_BEGIN;
+    var offset = (color - topColor + colorCount) % colorCount;
     var angle = -Math.PI / 2 + offset * 2 * Math.PI / 7;
     var pip = makeSizedDiv(centerX + Math.round(Math.cos(angle) * radius) - Math.round(pipSize / 2),
         centerY + Math.round(Math.sin(angle) * radius) - Math.round(pipSize / 2), pipSize, pipSize, wheel);
@@ -1720,7 +1735,23 @@ function drawTerrainColorWheel(px, py, width, height, parent) {
   }
 }
 
-function drawCompactPlayerPanel(px, py, width, player) {
+function getTerrainWheelTopColor(player) {
+  // Before a faction is selected, retain the neutral reference-wheel order.
+  // Expansion factions can keep W/O/X/Z as their faction identity while their
+  // playable terrain is stored separately in auxcolor. This includes Yetis:
+  // getMainDigColor() intentionally returns their white faction identity, so
+  // it is not the right value for an orientation wheel.
+  if(!player || player.faction == undefined || player.faction == F_NONE) return null;
+  var color = player.auxcolor;
+  if(!(color >= CIRCLE_BEGIN && color <= CIRCLE_END) && player.getMainDigColor) {
+    color = player.getMainDigColor();
+  }
+  return color >= CIRCLE_BEGIN && color <= CIRCLE_END ? color : null;
+}
+
+function drawCompactPlayerPanel(px, py, width, player, optHeight) {
+  var panelHeight = optHeight || 112;
+  var expandedPanel = panelHeight > 112 && width >= 340;
   var current = player.index == state.currentPlayer;
   var factionColor = getImageColor(player.woodcolor);
   var factionText = getHighContrastColor(factionColor);
@@ -1730,20 +1761,22 @@ function drawCompactPlayerPanel(px, py, width, player) {
   var conversionPreview = player.human && pactions.length ? getPendingConversionResourcePreview(player, pactions) : null;
   var showingPlannedResources = conversionPreview && conversionPreview.changed && !conversionPreview.invalid;
   var displayedResources = showingPlannedResources ? conversionPreview.resources : player;
-  var bg = makeSizedDiv(px, py, width, 112, hudElement);
+  var bg = makeSizedDiv(px, py, width, panelHeight, hudElement);
   bg.style.boxSizing = 'border-box';
-  bg.style.border = current ? '3px solid #8d6332' : '1px solid #765439';
+  bg.style.border = expandedPanel ? '2px solid ' + OVER_FOLD_PANEL_BORDER :
+      (current ? '3px solid #8d6332' : '1px solid #765439');
   bg.style.borderRadius = '9px';
   bg.style.background = player.passed ? 'linear-gradient(145deg, #eee7dd, #d4c9bb)' : 'linear-gradient(145deg, #fffaf0, #e7cf9f)';
   bg.style.boxShadow = current ? '0 3px 7px rgba(70,45,24,.28), inset 0 0 0 1px rgba(255,255,255,.74)' : '0 2px 4px rgba(70,45,24,.18), inset 0 0 0 1px rgba(255,255,255,.65)';
 
-  var header = makeSizedDiv(px + 3, py + 3, width - 6, 24, hudElement);
+  var header = makeSizedDiv(px + 3, py + 3, width - 6, expandedPanel ? 28 : 24, hudElement);
   header.style.boxSizing = 'border-box';
-  header.style.padding = '3px 7px';
+  header.style.padding = expandedPanel ? '5px 8px' : '3px 7px';
   header.style.borderRadius = '5px';
   header.style.background = factionColor;
   header.style.color = factionText;
   header.style.fontWeight = 'bold';
+  if(expandedPanel) header.style.fontSize = '13px';
   header.style.overflow = 'hidden';
   header.style.whiteSpace = 'nowrap';
   header.title = getFullName(player);
@@ -1751,22 +1784,22 @@ function drawCompactPlayerPanel(px, py, width, player) {
 
   var status = player.passed ? 'PASSED' : (player.index == state.startPlayer ? 'START' : '');
   if(status) {
-    var statusBadge = makeSizedDiv(px + 7, py + 29, 42, 10, hudElement);
+    var statusBadge = makeSizedDiv(px + 8, py + (expandedPanel ? 34 : 29), 48, 11, hudElement);
     statusBadge.style.color = player.passed ? '#765346' : '#52633e';
-    statusBadge.style.fontSize = '7px';
+    statusBadge.style.fontSize = expandedPanel ? '8px' : '7px';
     statusBadge.style.fontWeight = 'bold';
     statusBadge.innerHTML = status;
   }
 
   if(showingPlannedResources) {
-    var plannedBadge = makeSizedDiv(px + 53, py + 29, 54, 10, hudElement);
+    var plannedBadge = makeSizedDiv(px + 58, py + (expandedPanel ? 34 : 29), 54, 10, hudElement);
     plannedBadge.style.color = '#27613a';
     plannedBadge.style.fontSize = '7px';
     plannedBadge.style.fontWeight = 'bold';
     plannedBadge.title = 'These resources include pending conversions. Nothing is spent until the full turn executes successfully.';
     plannedBadge.innerHTML = 'PLANNED';
   } else if(conversionPreview && conversionPreview.invalid) {
-    var planErrorBadge = makeSizedDiv(px + 53, py + 29, 68, 10, hudElement);
+    var planErrorBadge = makeSizedDiv(px + 58, py + (expandedPanel ? 34 : 29), 68, 10, hudElement);
     planErrorBadge.style.color = '#9d342d';
     planErrorBadge.style.fontSize = '7px';
     planErrorBadge.style.fontWeight = 'bold';
@@ -1774,15 +1807,15 @@ function drawCompactPlayerPanel(px, py, width, player) {
     planErrorBadge.innerHTML = 'CHECK PLAN';
   }
 
-  var vp = makeSizedDiv(px + width - 39, py + 29, 31, 20, hudElement);
+  var vp = makeSizedDiv(px + width - 43, py + (expandedPanel ? 33 : 29), expandedPanel ? 35 : 31, expandedPanel ? 23 : 20, hudElement);
   vp.style.boxSizing = 'border-box';
-  vp.style.padding = '3px 1px';
+  vp.style.padding = expandedPanel ? '4px 1px' : '3px 1px';
   vp.style.border = '1px solid #74452d';
   vp.style.borderRadius = '10px';
   vp.style.background = 'radial-gradient(circle at 36% 28%, #f7d794, #b66d43 70%, #75412f)';
   vp.style.color = '#3f251b';
   vp.style.cursor = 'pointer';
-  vp.style.fontSize = '11px';
+  vp.style.fontSize = expandedPanel ? '12px' : '11px';
   vp.style.fontWeight = 'bold';
   vp.style.lineHeight = '12px';
   vp.style.textAlign = 'center';
@@ -1795,29 +1828,31 @@ function drawCompactPlayerPanel(px, py, width, player) {
   // cards. Spread its resources across the available line rather than leaving
   // the useful information bunched into its left edge.
   var widePanel = width >= 340;
-  drawPlayerDashboardToken(px + (widePanel ? 12 : 8), py + 43, 'coin', displayedResources.c + ' C', widePanel ? 50 : 32, resourceLabelColor);
-  drawPlayerDashboardToken(px + (widePanel ? 84 : 52), py + 43, 'worker', displayedResources.w + ' W', widePanel ? 50 : 32, resourceLabelColor);
-  drawPlayerDashboardToken(px + (widePanel ? 156 : 98), py + 43, 'priest', displayedResources.p + '/' + displayedResources.pp + ' P', widePanel ? 64 : 40, resourceLabelColor);
-  drawPlayerDashboardToken(px + (widePanel ? 241 : 153), py + 43, 'power', displayedResources.pw0 + '/' + displayedResources.pw1 + '/' + displayedResources.pw2 + ' PW', widePanel ? 80 : 58, resourceLabelColor);
+  var resourcesY = py + (expandedPanel ? 54 : 43);
+  var resourceFontSize = expandedPanel ? '12px' : null;
+  drawPlayerDashboardToken(px + (widePanel ? 12 : 8), resourcesY, 'coin', displayedResources.c + ' C', widePanel ? 55 : 32, resourceLabelColor, resourceFontSize);
+  drawPlayerDashboardToken(px + (widePanel ? 87 : 52), resourcesY, 'worker', displayedResources.w + ' W', widePanel ? 55 : 32, resourceLabelColor, resourceFontSize);
+  drawPlayerDashboardToken(px + (widePanel ? 162 : 98), resourcesY, 'priest', displayedResources.p + '/' + displayedResources.pp + ' P', widePanel ? 68 : 40, resourceLabelColor, resourceFontSize);
+  drawPlayerDashboardToken(px + (widePanel ? 248 : 153), resourcesY, 'power', displayedResources.pw0 + '/' + displayedResources.pw1 + '/' + displayedResources.pw2 + ' PW', widePanel ? 84 : 58, resourceLabelColor, resourceFontSize);
 
-  var buildings = makeSizedDiv(px + 8, py + 60, width - 16, 12, hudElement);
+  var buildings = makeSizedDiv(px + 8, py + (expandedPanel ? 75 : 60), width - 16, 12, hudElement);
   buildings.style.color = '#51351f';
-  buildings.style.fontSize = '8px';
+  buildings.style.fontSize = expandedPanel ? '9px' : '8px';
   buildings.style.fontWeight = 'bold';
   buildings.innerHTML = 'D ' + built_d(player) + '/8 · TP ' + built_tp(player) + '/4 · TE ' + built_te(player) + '/3 · SH ' + built_sh(player) + '/1 · SA ' + built_sa(player) + '/1';
 
-  var advances = makeSizedDiv(px + 8, py + 73, width - 16, 11, hudElement);
+  var advances = makeSizedDiv(px + 8, py + (expandedPanel ? 91 : 73), width - 16, 11, hudElement);
   advances.style.color = '#63472d';
-  advances.style.fontSize = '8px';
+  advances.style.fontSize = expandedPanel ? '9px' : '8px';
   advances.style.fontWeight = 'bold';
   var travel = player.maxtunnelcarpetdistance > 0 ? 'RANGE ' + player.tunnelcarpetdistance + '/' + player.maxtunnelcarpetdistance : 'SHIP ' + getShipping(player, false) + '/' + player.maxshipping;
   advances.innerHTML = 'DIG ' + player.digging + '/' + player.maxdigging + ' · ' + travel;
 
-  var incomeBar = makeSizedDiv(px + 4, py + 88, width - 8, 19, hudElement);
+  var incomeBar = makeSizedDiv(px + 4, py + (expandedPanel ? 108 : 88), width - 8, expandedPanel ? 20 : 19, hudElement);
   incomeBar.style.boxSizing = 'border-box';
   incomeBar.style.padding = '4px 6px';
   incomeBar.style.borderRadius = '5px';
-  incomeBar.style.fontSize = '8px';
+  incomeBar.style.fontSize = expandedPanel ? '9px' : '8px';
   incomeBar.style.fontWeight = 'bold';
   if(state.round == 6) {
     // Income is never collected after the sixth round. Keep the final card
@@ -2029,7 +2064,7 @@ function drawUserFactionBoard(px, py, width) {
 
   var boardPanel = makeSizedDiv(px, py + 23, width, USER_FACTION_BOARD_HEIGHT, hudElement);
   boardPanel.style.boxSizing = 'border-box';
-  boardPanel.style.border = '2px solid #624936';
+  boardPanel.style.border = '2px solid ' + OVER_FOLD_PANEL_BORDER;
   boardPanel.style.borderRadius = '12px';
   boardPanel.style.background = 'linear-gradient(145deg, rgba(255,248,225,.94), rgba(221,193,143,.90))';
   boardPanel.style.boxShadow = '0 5px 12px rgba(55,39,24,.20), inset 0 0 0 1px rgba(255,255,255,.60)';
@@ -2308,7 +2343,7 @@ function drawBoardWorkspaceSurfaces() {
   var boardWorkspaceTop = TOP_PLAY_CONTENT_Y - 7;
   var powerPanel = makeSizedDiv(3, boardWorkspaceTop, 82, 474, hudElement);
   powerPanel.style.boxSizing = 'border-box';
-  powerPanel.style.border = '2px solid #47335d';
+  powerPanel.style.border = '2px solid ' + OVER_FOLD_PANEL_BORDER;
   powerPanel.style.borderRadius = '12px';
   powerPanel.style.background = 'linear-gradient(145deg, rgba(241,232,249,.94), rgba(181,160,203,.94))';
   powerPanel.style.boxShadow = '0 6px 14px rgba(55,39,24,.24), inset 0 0 0 1px rgba(255,255,255,.55)';
@@ -2317,7 +2352,7 @@ function drawBoardWorkspaceSurfaces() {
   var cultPanelX = CULT_PANEL_LEFT;
   var cultPanel = makeSizedDiv(cultPanelX, boardWorkspaceTop, 255, 474, hudElement);
   cultPanel.style.boxSizing = 'border-box';
-  cultPanel.style.border = '2px solid #624936';
+  cultPanel.style.border = '2px solid ' + OVER_FOLD_PANEL_BORDER;
   cultPanel.style.borderRadius = '12px';
   cultPanel.style.background = 'linear-gradient(145deg, rgba(255,247,219,.88), rgba(221,190,133,.88))';
   cultPanel.style.boxShadow = '0 6px 14px rgba(55,39,24,.24), inset 0 0 0 1px rgba(255,255,255,.55)';
@@ -2325,7 +2360,7 @@ function drawBoardWorkspaceSurfaces() {
 
   var scoringPanel = makeSizedDiv(0, ROUND_SCORING_TOP - 10, ROUND_SCORING_PANEL_WIDTH, ROUND_SCORING_PANEL_HEIGHT, hudElement);
   scoringPanel.style.boxSizing = 'border-box';
-  scoringPanel.style.border = '2px solid #624936';
+  scoringPanel.style.border = '2px solid ' + OVER_FOLD_PANEL_BORDER;
   scoringPanel.style.borderRadius = '12px';
   scoringPanel.style.background = 'linear-gradient(145deg, rgba(255,248,225,.93), rgba(211,179,123,.88))';
   scoringPanel.style.boxShadow = '0 5px 12px rgba(55,39,24,.22), inset 0 0 0 1px rgba(255,255,255,.62)';
@@ -2334,7 +2369,7 @@ function drawBoardWorkspaceSurfaces() {
   var quickConvertPanel = makeSizedDiv(QUICK_CONVERT_PANEL_X, ROUND_SCORING_TOP - 10,
       QUICK_CONVERT_PANEL_WIDTH, ROUND_SCORING_PANEL_HEIGHT, hudElement);
   quickConvertPanel.style.boxSizing = 'border-box';
-  quickConvertPanel.style.border = '2px solid #56654e';
+  quickConvertPanel.style.border = '2px solid ' + OVER_FOLD_PANEL_BORDER;
   quickConvertPanel.style.borderRadius = '12px';
   quickConvertPanel.style.background = 'linear-gradient(145deg, rgba(241,246,230,.95), rgba(173,191,153,.90))';
   quickConvertPanel.style.boxShadow = '0 5px 12px rgba(45,63,38,.20), inset 0 0 0 1px rgba(255,255,255,.62)';
@@ -2342,7 +2377,7 @@ function drawBoardWorkspaceSurfaces() {
 
   var dashboardPanel = makeSizedDiv(0, PLAYER_PANEL_TOP - 30, GAMEPLAY_WIDTH, 152, hudElement);
   dashboardPanel.style.boxSizing = 'border-box';
-  dashboardPanel.style.border = '2px solid #624936';
+  dashboardPanel.style.border = '2px solid ' + OVER_FOLD_PANEL_BORDER;
   dashboardPanel.style.borderRadius = '12px';
   dashboardPanel.style.background = 'linear-gradient(145deg, rgba(255,248,225,.88), rgba(221,193,143,.84))';
   dashboardPanel.style.boxShadow = '0 5px 12px rgba(55,39,24,.18), inset 0 0 0 1px rgba(255,255,255,.55)';
@@ -2350,7 +2385,7 @@ function drawBoardWorkspaceSurfaces() {
 
   var supplyPanel = makeSizedDiv(0, SUPPLY_TOP - 10, GAMEPLAY_WIDTH, 655, hudElement);
   supplyPanel.style.boxSizing = 'border-box';
-  supplyPanel.style.border = '2px solid #624936';
+  supplyPanel.style.border = '2px solid ' + OVER_FOLD_PANEL_BORDER;
   supplyPanel.style.borderRadius = '12px';
   supplyPanel.style.background = 'linear-gradient(145deg, rgba(255,248,225,.82), rgba(221,193,143,.78))';
   supplyPanel.style.boxShadow = '0 6px 14px rgba(55,39,24,.20), inset 0 0 0 1px rgba(255,255,255,.55)';
@@ -2720,16 +2755,19 @@ function drawHumanUI(px, py, playerIndex) {
   var mainFactionCardX = px + 8;
   var mainFactionCardY = py + 3;
   var mainFactionCardWidth = 390;
-  var mainActionRowHeight = 112;
+  var mainActionRowHeight = 132;
+  var mainTerrainWheelWidth = 142;
   if(showMainFactionCard) {
     // The persistent chooser moved into ALL ACTIONS. Use its former left-hand
     // footprint for the live faction resources without removing the board copy.
-    drawCompactPlayerPanel(mainFactionCardX, mainFactionCardY, mainFactionCardWidth, player);
+    drawCompactPlayerPanel(mainFactionCardX, mainFactionCardY, mainFactionCardWidth, player, mainActionRowHeight);
   } else {
     makeSizedDiv(ACTIONPANELX, ACTIONPANELY, ACTIONPANELW, ACTIONPANELH, parent).style.border = '1px solid black';
   }
   var actionStatusX = showMainFactionCard ? mainFactionCardX + mainFactionCardWidth + 12 : px + ACTIONPANELW + 12;
-  var actionStatusWidth = 520;
+  var terrainWheelWidth = showMainFactionCard ? mainTerrainWheelWidth : GAMEPLAY_WIDTH - (actionStatusX + 520 + 8) - 5;
+  var terrainWheelX = showMainFactionCard ? GAMEPLAY_WIDTH - terrainWheelWidth - 5 : actionStatusX + 520 + 8;
+  var actionStatusWidth = showMainFactionCard ? terrainWheelX - actionStatusX - 8 : 520;
   var actionRowTop = showMainFactionCard ? mainFactionCardY : py - 5;
   var actionRowHeight = showMainFactionCard ? mainActionRowHeight : ACTIONPANELH;
 
@@ -2738,27 +2776,34 @@ function drawHumanUI(px, py, playerIndex) {
   actionEl.style.left = actionStatusX + 'px';
   actionEl.style.top = actionRowTop + 'px';
   helpEl.style.left = actionStatusX + 'px';
-  helpEl.style.top = (showMainFactionCard ? actionRowTop + 51 : py + 52) + 'px';
+  helpEl.style.top = (showMainFactionCard ? actionRowTop + 70 : py + 52) + 'px';
   helpEl.style.boxSizing = 'border-box';
   helpEl.style.width = actionStatusWidth + 'px';
-  helpEl.style.minHeight = showMainFactionCard ? '52px' : '38px';
-  helpEl.style.height = showMainFactionCard ? '52px' : 'auto';
-  helpEl.style.padding = '11px 10px 7px';
+  helpEl.style.minHeight = showMainFactionCard ? '62px' : '38px';
+  helpEl.style.height = showMainFactionCard ? '62px' : 'auto';
+  helpEl.style.padding = showMainFactionCard ? '11px 12px 8px' : '11px 10px 7px';
   helpEl.style.background = 'linear-gradient(145deg, #fff8e5, #e6c98e)';
-  helpEl.style.border = '2px solid #6d4a2f';
+  helpEl.style.border = '2px solid ' + OVER_FOLD_PANEL_BORDER;
   helpEl.style.borderRadius = '7px';
   helpEl.style.boxShadow = '0 2px 4px rgba(55,35,18,.22), inset 0 1px 0 rgba(255,255,255,.62)';
   helpEl.style.color = '#563920';
-  helpEl.style.fontSize = '10px';
+  helpEl.style.fontSize = showMainFactionCard ? '11px' : '10px';
   helpEl.style.zIndex = 100;
 
   // The terrain wheel completes the same final resource/plan strip and is
   // framed to match the card and game-message surfaces beside it.
-  var terrainWheelX = actionStatusX + actionStatusWidth + 8;
-  var terrainWheelWidth = GAMEPLAY_WIDTH - terrainWheelX - 5;
-  drawTerrainColorWheel(terrainWheelX, actionRowTop, terrainWheelWidth, actionRowHeight, parent);
+  // Retain the wheel's familiar 112px circle while shrinking only its empty
+  // surround. The reclaimed width becomes room for the plan and game message.
+  var terrainWheelTop = actionRowTop;
+  var terrainWheelHeight = actionRowHeight;
+  drawTerrainColorWheel(terrainWheelX, terrainWheelTop, terrainWheelWidth, terrainWheelHeight,
+      parent, getTerrainWheelTopColor(player), showMainFactionCard ? 112 : null);
 
-  if(state.type == S_ACTION && player.human) drawActionPlanSummary(player);
+  if(state.type == S_ACTION && player.human) {
+    actionPlanSummaryWidth = actionStatusWidth;
+    actionPlanSummaryExpanded = showMainFactionCard;
+    drawActionPlanSummary(player);
+  }
   else {
     actionPlanSummaryElement = null;
     actionEl.innerHTML = '';
@@ -2903,6 +2948,10 @@ var actionPlanTextElement = null;
 var actionPlanAutoRunButton = null;
 var actionPlanExecuteButton = null;
 var actionPlanClearButton = null;
+var actionPlanUndoButton = null;
+var actionPlanPassButton = null;
+var actionPlanSummaryWidth = 520;
+var actionPlanSummaryExpanded = false;
 
 function updateActionPlanSummary() {
   if(!actionPlanSummaryElement) return;
@@ -2912,7 +2961,9 @@ function updateActionPlanSummary() {
   // for every path.
   if(!actionPlanTextElement || !actionPlanSummaryElement.contains(actionPlanTextElement) ||
       !actionPlanAutoRunButton || !actionPlanSummaryElement.contains(actionPlanAutoRunButton) ||
-      !actionPlanExecuteButton || !actionPlanSummaryElement.contains(actionPlanExecuteButton)) {
+      !actionPlanExecuteButton || !actionPlanSummaryElement.contains(actionPlanExecuteButton) ||
+      !actionPlanUndoButton || !actionPlanSummaryElement.contains(actionPlanUndoButton) ||
+      !actionPlanPassButton || !actionPlanSummaryElement.contains(actionPlanPassButton)) {
     if(state.type == S_ACTION && getCurrentPlayer() && getCurrentPlayer().human) {
       drawActionPlanSummary(getCurrentPlayer());
     }
@@ -2945,60 +2996,95 @@ function updateActionPlanSummary() {
   actionPlanClearButton.style.cursor = hasPlan ? 'pointer' : 'default';
   actionPlanClearButton.title = hasPlan ? 'Clear every planned action.' : 'There are no planned actions to clear.';
   actionPlanClearButton.onclick = hasPlan ? clearPlannedActions : null;
+
+  var canUndo = hasPlan && !humanStateBusy() && executeButtonClearFun_ != null;
+  actionPlanUndoButton.style.background = canUndo ? 'linear-gradient(145deg, #e6c47d, #a67438)' : 'linear-gradient(145deg, #b99c67, #765d3e)';
+  actionPlanUndoButton.style.borderColor = canUndo ? '#7a5428' : '#5a442d';
+  actionPlanUndoButton.style.boxShadow = canUndo ? '0 2px 4px rgba(99,64,23,.3), inset 0 1px 1px rgba(255,255,255,.3)' : '0 2px 3px rgba(70,49,27,.28), inset 0 1px 1px rgba(255,255,255,.28)';
+  actionPlanUndoButton.style.opacity = canUndo ? '1' : '.55';
+  actionPlanUndoButton.style.cursor = canUndo ? 'pointer' : 'default';
+  actionPlanUndoButton.title = canUndo ? 'Undo the last action in this turn plan.' : 'There is no completed planned action to undo.';
+  actionPlanUndoButton.onclick = canUndo ? executeButtonClearFun : null;
+
+  var hasTurnAction = false;
+  for(var actionIndex = 0; actionIndex < pactions.length; actionIndex++) {
+    if(isTurnAction(pactions[actionIndex])) {
+      hasTurnAction = true;
+      break;
+    }
+  }
+  var canPass = !humanStateBusy() && !hasTurnAction;
+  actionPlanPassButton.style.background = canPass ? 'linear-gradient(145deg, #c55c4e, #86332e)' : 'linear-gradient(145deg, #b99c67, #765d3e)';
+  actionPlanPassButton.style.borderColor = canPass ? '#65231f' : '#5a442d';
+  actionPlanPassButton.style.boxShadow = canPass ? '0 2px 4px rgba(101,35,31,.32), inset 0 1px 1px rgba(255,255,255,.24)' : '0 2px 3px rgba(70,49,27,.28), inset 0 1px 1px rgba(255,255,255,.28)';
+  actionPlanPassButton.style.opacity = canPass ? '1' : '.55';
+  actionPlanPassButton.style.cursor = canPass ? 'pointer' : 'default';
+  actionPlanPassButton.title = canPass ? 'Pass this round and choose your next bonus tile.' :
+      (humanStateBusy() ? 'Finish the current choice before passing.' : 'Your turn plan already has an ending action.');
+  actionPlanPassButton.onclick = canPass ? function() { prepareAction(new Action(A_PASS)); } : null;
 }
 
 function drawActionPlanSummary(player) {
+  var width = actionPlanSummaryWidth || 520;
+  var expanded = actionPlanSummaryExpanded && width >= 550;
+  var height = expanded ? 64 : 45;
+  var buttonHeight = expanded ? 24 : 35;
+  var buttonY = expanded ? 35 : 4;
+  var buttonGap = expanded ? 5 : 6;
+  var undoWidth = expanded ? 62 : 50;
+  var clearWidth = expanded ? 70 : 60;
+  var passWidth = expanded ? 64 : 56;
+  var autoWidth = expanded ? 98 : 84;
+  var executeWidth = expanded ? 76 : 70;
+  var buttonsWidth = undoWidth + clearWidth + passWidth + autoWidth + executeWidth + buttonGap * 4;
+  var buttonsX = width - buttonsWidth - (expanded ? 10 : 9);
+
   actionPlanSummaryElement = actionEl;
   actionEl.innerHTML = '';
   actionEl.style.boxSizing = 'border-box';
-  actionEl.style.width = '520px';
-  actionEl.style.height = '45px';
+  actionEl.style.width = width + 'px';
+  actionEl.style.height = height + 'px';
   actionEl.style.background = 'linear-gradient(90deg, #3d4a5a, #657286)';
-  actionEl.style.border = '2px solid #2e3744';
+  actionEl.style.border = '2px solid ' + OVER_FOLD_PANEL_BORDER;
   actionEl.style.borderRadius = '7px';
   actionEl.style.boxShadow = '0 2px 4px rgba(21, 27, 34, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)';
   actionEl.style.color = '#f8efd6';
   actionEl.style.fontSize = '12px';
 
-  actionPlanTextElement = makeSizedDiv(9, 12, 223, 20, actionEl);
+  actionPlanTextElement = makeSizedDiv(9, expanded ? 6 : 12, expanded ? width - 18 : buttonsX - 15, expanded ? 24 : 20, actionEl);
   actionPlanTextElement.style.overflow = 'hidden';
-  actionPlanTextElement.style.whiteSpace = 'nowrap';
-  actionPlanTextElement.style.textOverflow = 'ellipsis';
+  actionPlanTextElement.style.whiteSpace = expanded ? 'normal' : 'nowrap';
+  actionPlanTextElement.style.lineHeight = expanded ? '12px' : 'normal';
+  actionPlanTextElement.style.textOverflow = expanded ? 'clip' : 'ellipsis';
+  if(expanded) actionPlanTextElement.style.fontSize = '11px';
 
-  actionPlanClearButton = makeSizedDiv(238, 4, 88, 35, actionEl);
+  function makePlanButton(x, width, label) {
+    var button = makeSizedDiv(x, buttonY, width, buttonHeight, actionEl);
+    button.style.boxSizing = 'border-box';
+    button.style.padding = expanded ? '6px 3px' : '10px 3px';
+    button.style.borderRadius = expanded ? '5px' : '6px';
+    button.style.color = '#fffdf0';
+    button.style.fontSize = expanded ? '9px' : '9px';
+    button.style.fontWeight = 'bold';
+    button.style.textAlign = 'center';
+    button.style.userSelect = 'none';
+    button.innerHTML = label;
+    return button;
+  }
+
+  actionPlanUndoButton = makePlanButton(buttonsX, undoWidth, 'UNDO');
+  actionPlanClearButton = makePlanButton(buttonsX + undoWidth + buttonGap, clearWidth, 'CLEAR');
   actionPlanClearButton.style.boxSizing = 'border-box';
-  actionPlanClearButton.style.padding = '10px 3px';
   actionPlanClearButton.style.background = 'linear-gradient(145deg, #d97761, #913f36)';
   actionPlanClearButton.style.border = '1px solid #6c2c27';
-  actionPlanClearButton.style.borderRadius = '5px';
   actionPlanClearButton.style.color = '#fff4dc';
-  actionPlanClearButton.style.fontSize = '9px';
-  actionPlanClearButton.style.fontWeight = 'bold';
-  actionPlanClearButton.style.textAlign = 'center';
-  actionPlanClearButton.style.userSelect = 'none';
-  actionPlanClearButton.innerHTML = 'CLEAR PLAN';
-
-  actionPlanAutoRunButton = makeSizedDiv(332, 4, 92, 35, actionEl);
+  actionPlanPassButton = makePlanButton(buttonsX + undoWidth + buttonGap + clearWidth + buttonGap, passWidth, 'PASS');
+  actionPlanAutoRunButton = makePlanButton(buttonsX + undoWidth + buttonGap + clearWidth + buttonGap + passWidth + buttonGap, autoWidth, 'AUTO-RUN');
   actionPlanAutoRunButton.style.boxSizing = 'border-box';
-  actionPlanAutoRunButton.style.padding = '10px 2px';
   actionPlanAutoRunButton.style.border = '2px solid #1c4265';
-  actionPlanAutoRunButton.style.borderRadius = '6px';
-  actionPlanAutoRunButton.style.color = '#fffdf0';
-  actionPlanAutoRunButton.style.fontSize = '9px';
-  actionPlanAutoRunButton.style.fontWeight = 'bold';
-  actionPlanAutoRunButton.style.textAlign = 'center';
-  actionPlanAutoRunButton.style.userSelect = 'none';
-
-  actionPlanExecuteButton = makeSizedDiv(430, 4, 81, 35, actionEl);
+  actionPlanExecuteButton = makePlanButton(buttonsX + undoWidth + buttonGap + clearWidth + buttonGap + passWidth + buttonGap + autoWidth + buttonGap, executeWidth, 'RUN');
   actionPlanExecuteButton.style.boxSizing = 'border-box';
-  actionPlanExecuteButton.style.padding = '10px 2px';
   actionPlanExecuteButton.style.border = '2px solid #0f4b2b';
-  actionPlanExecuteButton.style.borderRadius = '6px';
-  actionPlanExecuteButton.style.color = '#fffdf0';
-  actionPlanExecuteButton.style.fontSize = '10px';
-  actionPlanExecuteButton.style.fontWeight = 'bold';
-  actionPlanExecuteButton.style.textAlign = 'center';
-  actionPlanExecuteButton.style.userSelect = 'none';
   updateActionPlanSummary();
 }
 
